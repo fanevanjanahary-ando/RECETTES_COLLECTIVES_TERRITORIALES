@@ -1,0 +1,7 @@
+Django==6.1.1
+numpy==2.5.3
+scikit-learn==1.9.1
+reportlab==5.0.1
+openpyxl==3.1.5
+whitenoise>=6.9
+gunicorn>=23.0

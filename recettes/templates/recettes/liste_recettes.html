@@ -1,0 +1,116 @@
+{% extends "recettes/base.html" %}{% load formats %}
+{% block title %}Journal des recettes{% endblock %}
+{% block tw_plugins %}{% endblock %}
+{% block body_class %}bg-[#f9f9fb] font-inter text-[#191c1e]{% endblock %}
+{% block main_class %}p-8 max-w-7xl mx-auto w-full flex flex-col gap-6{% endblock %}
+{% block content %}
+
+
+<div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+<div>
+<div class="flex items-center gap-2 text-xs text-[#64748b] mb-1">
+<span class="">Pilotage Budgétaire</span>
+<span class="">›</span>
+<span class="text-[#191c1e] font-medium">Journal des recettes</span>
+</div>
+<h1 class="text-2xl font-bold font-pjs text-[#191c1e] tracking-tight">Journal des recettes enregistrées</h1>
+<p class="text-xs text-[#64748b] mt-0.5">Grand livre chronologique des recettes enregistrées · exercice {{ exercice }}.</p>
+</div>
+<div class="flex items-center gap-2">
+<a class="px-3.5 py-2 bg-white border border-[#eaedf1] text-xs font-semibold text-[#191c1e] rounded-lg hover:bg-[#f9f9fb] transition-colors flex items-center gap-1.5 shadow-2xs" href='{% url "export_csv" "recettes" %}'>
+<span class="material-symbols-outlined text-base text-[#64748b]">download</span>
+<span class="">Export CSV</span>
+</a>
+{% if peut_saisir %}<a class="px-3.5 py-2 bg-[#25272c] text-white text-xs font-semibold rounded-lg hover:bg-[#191c1e] transition-colors flex items-center gap-1.5 shadow-sm" href='{% url "ajouter_recette" %}'>
+<span class="material-symbols-outlined text-base text-[#b8f7e4]">add_circle</span>
+<span class="">Saisir une recette</span>
+</a>{% endif %}
+</div>
+</div>
+
+<form action='{% url "liste_recettes" %}' class="bg-[#ffffff] p-4 rounded-xl border border-[#eaedf1] shadow-2xs flex flex-wrap items-center justify-between gap-4" method="get">{% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+<div class="flex flex-wrap items-center gap-3">
+<div class="flex items-center gap-2 bg-[#f9f9fb] border border-[#eaedf1] px-3 py-1.5 rounded-lg text-xs">
+<span class="text-[#64748b]">Période :</span>
+<select class="bg-transparent font-medium text-[#191c1e] focus:outline-none cursor-pointer" name="periode" onchange="this.form.submit">{% for v,l in periodes %}<option value="{{ v }}"{% if v == periode %} selected{% endif %}>{{ l }}</option>{% endfor %}<option value="toutes"{% if periode == "toutes" %} selected{% endif %}>Toutes périodes</option></select>
+</div>
+<div class="flex items-center gap-2 bg-[#f9f9fb] border border-[#eaedf1] px-3 py-1.5 rounded-lg text-xs">
+<span class="text-[#64748b]">Secteur :</span>
+<select class="bg-transparent font-medium text-[#191c1e] focus:outline-none cursor-pointer" name="secteur" onchange="this.form.submit"><option value="">Tous les secteurs ({{ secteurs|length }})</option>{% for s in secteurs %}<option value="{{ s.pk }}"{% if secteur_filtre == s.pk|stringformat:"s" %} selected{% endif %}>{{ s.nom }}</option>{% endfor %}</select>
+</div>
+<div class="flex items-center gap-2 bg-[#f9f9fb] border border-[#eaedf1] px-3 py-1.5 rounded-lg text-xs">
+<span class="text-[#64748b]">Nature comptable :</span>
+<select class="bg-transparent font-medium text-[#191c1e] focus:outline-none cursor-pointer" name="chapitre" onchange="this.form.submit"><option value="">Toutes les catégories</option>{% for c,l in chapitres %}<option value="{{ c }}"{% if chapitre_filtre == c %} selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+</div>
+</div>
+<div class="text-xs text-[#64748b]"><strong class="text-[#191c1e]">{{ page.object_list|length }} écritures</strong> affichées sur {{ page.paginator.count }} • Total sélection : <strong class="text-[#191c1e] font-mono">{{ total_selection|ariary }}</strong></div>
+</form>
+
+<div class="bg-[#ffffff] rounded-xl border border-[#eaedf1] shadow-2xs overflow-hidden">
+<div class="overflow-x-auto">
+<table class="w-full text-left text-xs">
+<thead class="bg-[#f9f9fb]/60 text-[#64748b] text-[11px] uppercase tracking-wider font-semibold border-b border-[#eaedf1]">
+<tr>
+<th class="py-3 px-5">Date / Réf. Bordereau</th>
+<th class="py-3 px-4">Nature comptable</th>
+<th class="py-3 px-4">Secteur géographique</th>
+<th class="py-3 px-4 text-right">Montant perçu</th>
+<th class="py-3 px-4">Mode perception</th>
+<th class="py-3 px-4 text-center">Statut</th>
+<th class="py-3 px-5 text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-[#eaedf1]">
+
+{% for r in page %}<tr class="hover:bg-[#f9f9fb]/50 transition-colors">
+<td class="py-3.5 px-5">
+<div class="flex flex-col">
+<span class="font-semibold text-[#191c1e] font-mono">#{{ r.reference }}</span>
+<span class="text-[11px] text-[#64748b]">{{ r.date_imputation|date_fr }}</span>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex flex-col">
+<span class="font-medium text-[#191c1e]">{{ r.categorie.nom }}</span>
+<span class="text-[10px] text-[#64748b]">Cpte {{ r.categorie.code|default:"—" }} • Chap. {{ r.categorie.chapitre }}</span>
+</div>
+</td>
+<td class="py-3.5 px-4 text-[#64748b] font-medium">{{ r.secteur.nom }}</td>
+<td class="py-3.5 px-4 text-right font-bold text-[#191c1e] font-mono">{{ r.montant|ariary }}</td>
+<td class="py-3.5 px-4 text-[#64748b]">{{ r.get_mode_reglement_display }}</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Enregistré </span>
+</td>
+<td class="py-3.5 px-5 text-right">
+<a class="text-[#64748b] hover:text-[#191c1e] text-xs font-medium" href='{% url "detail_recette" r.pk %}'>Détail</a>{% if peut_gerer %}<a href="{% url 'modifier_recette' r.pk %}" class="text-[#64748b] hover:text-[#191c1e] text-xs font-medium ml-3">Modifier</a>{% endif %}
+</td>
+</tr>{% empty %}<tr><td class="py-10 text-center text-[#64748b]" colspan="7">Aucune recette pour ces critères.</td></tr>{% endfor %}
+
+
+
+
+
+
+
+
+</tbody>
+<tfoot class="bg-[#f9f9fb] font-semibold text-[#191c1e] border-t border-[#eaedf1]">
+<tr>
+<td class="py-3.5 px-5" colspan="3">Total de la page</td>
+<td class="py-3.5 px-4 text-right font-bold font-mono">{{ total_page|ariary }}</td>
+<td class="py-3.5 px-4" colspan="3"></td>
+</tr>
+</tfoot>
+</table>
+</div>
+<div class="p-4 border-t border-[#eaedf1] flex items-center justify-between text-xs text-[#64748b]">
+<span class="">Page {{ page.number }} sur {{ page.paginator.num_pages }}</span>
+<div class="flex items-center gap-1">{% if page.has_previous %}<a href="?{{ querystring }}{% if querystring %}&{% endif %}page={{ page.previous_page_number }}" class="px-2.5 py-1 hover:bg-#f9f9fb rounded font-medium text-#191c1e">‹ Précédent</a>{% endif %}{% for n in fenetre %}{% if n is None %}<span class="px-1 text-[#94a3b8]">...</span>{% elif n == page.number %}<span class="px-2.5 py-1 bg-[#25272c] text-white rounded font-medium">{{ n }}</span>{% else %}<a href="?{{ querystring }}{% if querystring %}&{% endif %}page={{ n }}" class="px-2.5 py-1 hover:bg-[#f9f9fb] rounded font-medium text-[#191c1e]">{{ n }}</a>{% endif %}{% endfor %}{% if page.has_next %}<a href="?{{ querystring }}{% if querystring %}&{% endif %}page={{ page.next_page_number }}" class="px-2.5 py-1 hover:bg-[#f9f9fb] rounded font-medium text-[#191c1e]">Suivant ›</a>{% endif %}</div>
+</div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+
+{% endblock %}

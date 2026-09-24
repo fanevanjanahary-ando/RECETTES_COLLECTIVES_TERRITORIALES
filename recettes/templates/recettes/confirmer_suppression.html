@@ -1,0 +1,15 @@
+{% extends "recettes/base.html" %}{% load formats %}
+{% block title %}Confirmer la suppression{% endblock %}
+{% block main_class %}max-w-lg mx-auto w-full px-8 pb-12 pt-16{% endblock %}
+{% block content %}
+<div class="bg-white rounded-xl border border-red-200 shadow-sm p-6 text-center">
+ <div class="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4"><span class="material-symbols-outlined text-red-600 text-2xl">warning</span></div>
+ <h1 class="font-pjs text-lg font-bold text-[#1E2024] mb-2">Supprimer cet élément ?</h1>
+ <p class="text-sm text-[#6B7280] mb-6">Vous êtes sur le point de supprimer <strong class="text-[#1E2024]">{{ objet }}</strong>. Cette action est définitive et ne peut pas être annulée.</p>
+ <form method="post" class="flex items-center justify-center gap-3">
+ {% csrf_token %}
+ <a href="{{ request.META.HTTP_REFERER|default:'/' }}" class="px-5 py-2.5 rounded-lg border border-[#E2E8F0] text-[#1E2024] text-xs font-semibold hover:bg-[#F8FAFC] transition-colors">Annuler</a>
+ <button type="submit" class="px-5 py-2.5 rounded-lg bg-red-600 text-white hover:bg-red-700 text-xs font-semibold shadow-sm transition-colors">Confirmer la suppression</button>
+ </form>
+</div>
+{% endblock %}

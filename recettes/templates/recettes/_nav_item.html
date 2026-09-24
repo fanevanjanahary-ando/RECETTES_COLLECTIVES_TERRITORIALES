@@ -1,0 +1,6 @@
+{% load formats %}{% est_actif actifs as actif %}<a href="{% url url %}" {% if actif %}aria-current="page" class="flex items-center gap-3 px-3 py-2.5 bg-[#EDEDED] border border-[#CBD5E1] text-[#131417] font-semibold rounded-lg transition-all"{% else %}class="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-transparent text-sm text-[#4B5563] hover:bg-[#F3F4F6] hover:border-[#E5E7EB] transition-colors"{% endif %}>
+<span class="w-7 h-7 rounded-md border {% if actif %}border-[#131417] bg-white{% else %}border-[#D1D5DB] bg-white{% endif %} flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[16px] {% if actif %}text-[#131417]{% else %}text-[#6B7280]{% endif %}">{{ icon }}</span>
+</span>
+<span class="text-[13px] leading-tight {% if actif %}uppercase tracking-wide{% endif %}">{{ label }}</span>{% if badge %}<span class="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-[#DC2626] text-white text-[10px] font-bold flex items-center justify-center">{{ badge }}</span>{% endif %}
+</a>

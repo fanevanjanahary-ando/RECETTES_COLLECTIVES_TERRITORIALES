@@ -1,0 +1,338 @@
+{% extends "recettes/base.html" %}{% load formats %}
+{% block title %}Gestion des secteurs{% endblock %}
+{% block body_class %}bg-[#f8f9ff] text-slate-800 font-pjs{% endblock %}
+{% block main_class %}flex-1 p-8 space-y-7 max-w-7xl w-full mx-auto{% endblock %}
+{% block content %}
+
+
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div>
+
+<nav class="flex items-center gap-2 text-xs text-slate-500 mb-1">
+<span class="">Administration &amp; Référentiels</span>
+<span class="text-slate-300">/</span>
+<span class="">Organisation territoriale</span>
+<span class="text-slate-300">/</span>
+<span class="text-emerald-700 font-medium">Gestion des Secteurs territoriaux</span>
+</nav>
+<h1 class="text-2xl font-bold text-slate-900 tracking-tight">Gestion des Secteurs territoriaux</h1>
+<p class="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
+ Découpage territorial opérationnel, régies de recettes associées, régisseurs titulaires et suivi en temps réel des plafonds d'encaissement.
+ </p>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<a class="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 shadow-sm transition-all" href='{% url "export_csv" "secteurs" %}'>
+<span class="material-symbols-outlined text-[16px] text-slate-500">file_download</span>
+<span class="">Exporter l'état</span>
+</a>
+<button class="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 shadow-sm shadow-emerald-600/20 transition-all" onclick="openNew" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span class="">Ajouter un secteur</span>
+</button>
+</div>
+</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+<div class="bg-white rounded-xl p-5 border border-slate-200/90 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between mb-3">
+<span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Périmètre géré</span>
+<div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+<span class="material-symbols-outlined text-[19px]">share_location</span>
+</div>
+</div>
+<div>
+<div class="text-2xl font-bold text-slate-900">{{ nb_lignes }}<span class="text-sm font-semibold text-slate-500">secteurs</span></div>
+<div class="flex items-center gap-1.5 mt-2 text-xs text-slate-500 font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+<span class="">{% for l in lignes %}{{ l.secteur.nom|cut:"Secteur " }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+</div>
+</div>
+</div>
+
+<div class="bg-white rounded-xl p-5 border border-slate-200/90 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between mb-3">
+<span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Régies Municipales</span>
+<div class="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center">
+<span class="material-symbols-outlined text-[19px]">point_of_sale</span>
+</div>
+</div>
+<div>
+<div class="text-2xl font-bold text-slate-900">{{ nb_regies }}<span class="text-sm font-semibold text-emerald-600">actives</span></div>
+<div class="flex items-center justify-between mt-2 text-xs text-slate-500">
+<span class="">Régies sans anomalie</span>
+<span class="font-semibold text-emerald-700">{{ sans_anomalie }}/{{ nb_lignes }}</span>
+</div>
+</div>
+</div>
+
+<div class="bg-amber-50/60 rounded-xl p-5 border border-amber-200/90 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between mb-3">
+<span class="text-xs font-semibold uppercase tracking-wider text-amber-800">Dépassement sous surveillance</span>
+<div class="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+<span class="material-symbols-outlined text-[19px]">warning</span>
+</div>
+</div>
+<div>
+<div class="text-2xl font-bold text-amber-900">{{ souffrance|ariary }}</div>
+<div class="flex items-center gap-1.5 mt-2 text-xs text-amber-800 font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+<span class="">{% if pire %}{{ pire.secteur.nom }} : {{ pire.anomalies_ouvertes }} dossier{{ pire.anomalies_ouvertes|pluralize }}{% if pire.retard_jours %} (+{{ pire.retard_jours }}j){% endif %}{% else %}Aucun dépassement{% endif %}</span>
+</div>
+</div>
+</div>
+
+<div class="bg-white rounded-xl p-5 border border-slate-200/90 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between mb-3">
+<span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Couverture Territoriale</span>
+<div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+<span class="material-symbols-outlined text-[19px]">map</span>
+</div>
+</div>
+<div>
+<div class="text-2xl font-bold text-slate-900">{% widthratio avec_regisseur nb_lignes 100 %}%</div>
+<div class="flex items-center justify-between mt-2 text-xs text-slate-500">
+<span class="">Régisseurs titulaires</span>
+<span class="font-semibold text-slate-700">{{ avec_regisseur }} / {{ nb_lignes }} désignés</span>
+</div>
+</div>
+</div>
+</div>
+
+<div class="bg-white p-5 rounded-xl border border-slate-200/80 shadow-sm space-y-3">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+<div>
+<h3 class="text-sm font-bold text-slate-900">Répartition des encaissements par secteur · Exercice {{ annee }}</h3>
+<p class="text-xs text-slate-500 mt-0.5">Total recouvré : <span class="font-semibold text-slate-800">{{ total|ariary }}</span> sur un plafond consolidé de {{ plafond_total|ariary }}</p>
+</div>
+<div class="flex items-center gap-1.5 text-xs text-slate-500">
+<span class="material-symbols-outlined text-[16px] text-emerald-600">sync</span>
+<span class="">Fréquence de reversement paramétrée par secteur</span>
+</div>
+</div>
+
+<div class="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex gap-0.5 p-0.5">{% for l in lignes %}<div class="{% if forloop.counter0 == 0 %}bg-emerald-500{% elif forloop.counter0 == 1 %}bg-teal-500{% elif forloop.counter0 == 2 %}bg-sky-500{% else %}bg-indigo-500{% endif %} h-full{% if forloop.first %} rounded-l-full{% endif %}{% if forloop.last %} rounded-r-full{% endif %} transition-all duration-300" style="width: {{ l.part_pct }}%" title="{{ l.secteur.nom }}: {{ l.part_pct }}%"></div>{% endfor %}</div>
+
+<div class="flex flex-wrap items-center gap-x-6 gap-y-2 pt-1 text-xs">{% for l in lignes %}<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full {% if forloop.counter0 == 0 %}bg-emerald-500{% elif forloop.counter0 == 1 %}bg-teal-500{% elif forloop.counter0 == 2 %}bg-sky-500{% else %}bg-indigo-500{% endif %}"></span><span class="text-slate-600 font-medium">{{ l.secteur.nom|cut:"Secteur " }} : <strong class="text-slate-900">{{ l.total|ariary }}</strong> ({{ l.part_pct|floatformat:0 }}%)</span></div>{% endfor %}</div>
+</div>
+
+<div class="space-y-3">
+<div class="flex items-center justify-between">
+<h2 class="text-base font-bold text-slate-900">Pôles et Secteurs Territoriaux Actifs</h2>
+<span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">{{ nb_lignes }} secteur{{ nb_lignes|pluralize }} enregistré{{ nb_lignes|pluralize }}</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+{% for l in lignes %}<div class="bg-white rounded-xl border border-amber-200/80 p-5 shadow-sm hover:border-amber-300 transition-all flex flex-col justify-between">
+<div>
+<div class="flex items-start justify-between gap-3 mb-3">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-slate-100 text-slate-700">{{ l.secteur.reference }}</span>
+<span class="text-xs text-slate-400 font-medium">Régie {{ l.secteur.code_regie }}</span>
+</div>
+<h3 class="text-base font-bold text-slate-900">{{ l.secteur.nom }}</h3>
+<p class="text-xs font-medium text-slate-500">{% if l.secteur.pole %}Pôle {{ l.secteur.pole }}{% else %}{{ l.secteur.description }}{% endif %}</p>
+</div>
+
+{% if not l.secteur.actif %}<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-50 text-slate-800 border border-slate-200">
+<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+<span class="">Régie suspendue</span>
+</div>{% elif l.anomalies_ouvertes %}<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+<span class="">{% if l.retard_jours %}Retard versement (+{{ l.retard_jours }}j){% else %}{{ l.anomalies_ouvertes }} dossier{{ l.anomalies_ouvertes|pluralize }} ouvert{{ l.anomalies_ouvertes|pluralize }}{% endif %}</span>
+</div>{% else %}<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+<span class="">Conforme</span>
+</div>{% endif %}
+</div>
+
+<div class="p-3 bg-slate-50 rounded-lg border border-slate-100 mb-4 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-full font-bold text-xs flex items-center justify-center {% if l.anomalies_ouvertes %}bg-amber-100 text-amber-800{% else %}bg-teal-100 text-teal-800{% endif %}">{{ l.secteur.regisseur.profil.initiales|default:"?" }}</div>
+<div>
+<div class="text-xs font-bold text-slate-800">{{ l.secteur.regisseur.get_full_name|default:"Aucun régisseur désigné" }}</div>
+<div class="text-[11px] text-slate-500">Régisseur titulaire{% if l.secteur.regisseur.profil.matricule %} · {{ l.secteur.regisseur.profil.matricule }}{% endif %}</div>
+</div>
+</div>
+<div class="text-right">
+<div class="text-[10px] font-semibold uppercase text-slate-400">Plafond légal</div>
+<div class="text-xs font-bold text-slate-800">{{ l.secteur.plafond_encaissement|ariary }}</div>
+</div>
+</div>
+
+<div class="space-y-1 mb-4"><div class="flex justify-between text-xs"><span class="text-slate-500">Montant recouvré {{ annee }}</span><span class="font-bold text-slate-800">{{ l.total|ariary }} <span class="text-emerald-600 font-semibold">({{ l.part_pct|floatformat:0 }}%)</span></span></div><div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="bg-emerald-500 h-1.5 rounded-full" style="width: {{ l.part_pct }}%"></div></div>{% if l.anomalies_ouvertes %}<div class="text-[11px] text-amber-700 font-medium pt-1">En souffrance de reversement vers le Trésor Public : <strong>{{ l.montant_souffrance|ariary }}</strong></div>{% else %}<div class="text-[11px] text-slate-500 pt-1">
+ Reversements à jour · Dernier visa Trésorier validé
+ </div>{% endif %}</div>
+</div>
+
+<div class="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+<span class="text-slate-400 font-mono text-[11px]">{{ l.secteur.iban_masque }}</span>
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 hover:text-slate-900 rounded-lg transition-colors" data-actif='{{ l.secteur.actif|yesno:"1,0" }}' data-code="{{ l.secteur.code }}" data-desc="{{ l.secteur.description }}" data-freq="{{ l.secteur.frequence_versement }}" data-iban="{{ l.secteur.iban }}" data-nom="{{ l.secteur.nom }}" data-pk="{{ l.secteur.pk }}" data-plafond="{{ l.secteur.plafond_encaissement|floatformat:0 }}" data-pole="{{ l.secteur.pole }}" data-ref="{{ l.secteur.reference }}" data-regisseur='{{ l.secteur.regisseur_id|default_if_none:"" }}' data-suppleant='{{ l.secteur.suppleant_id|default_if_none:"" }}' onclick="openDrawer(this)" type="button">
+<span class="material-symbols-outlined text-[16px]">tune</span>
+<span class="">Paramétrer le pôle</span>
+</button>
+</div>
+</div>{% endfor %}
+
+
+
+
+
+
+</div>
+</div>
+
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
+<div class="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
+<div class="flex items-center gap-2.5">
+<div class="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">verified_user</span>
+</div>
+<div>
+<h3 class="text-sm font-bold text-slate-900">Registre des anomalies &amp; contrôles de recouvrement</h3>
+<p class="text-xs text-slate-500">Traçabilité des signalements, relances et régularisations par secteur.</p>
+</div>
+</div>
+<a class="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 transition-colors" href='{% url "export_csv" "anomalies" %}'>
+<span class="material-symbols-outlined text-[16px]">download</span>
+<span class="">Exporter le registre complet</span>
+</a>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left text-xs">
+<thead class="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200/80">
+<tr>
+<th class="py-3 px-6">Date &amp; Heure</th>
+<th class="py-3 px-4">Secteur</th>
+<th class="py-3 px-4">Opération / Dossier contrôlé</th>
+<th class="py-3 px-4">Signalé par</th>
+<th class="py-3 px-6 text-right">Statut</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 text-slate-700">
+{% for a in registre %}<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-6 font-mono text-slate-500">{{ a.date_signalement|date:"d/m/Y H:i" }}</td>
+<td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-slate-100 text-slate-800">{{ a.secteur.reference }}</span></td>
+<td class="py-3 px-4 font-medium text-slate-900">{{ a.reference }} · {{ a.intitule }} ({{ a.montant|ariary }})</td>
+<td class="py-3 px-4 text-slate-600">{{ a.signale_par.get_full_name|default:"—" }}</td>
+<td class="py-3 px-6 text-right">
+{% if a.traitee %}<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">Régularisée</span>{% elif a.en_retard %}<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+ Échéance dépassée
+ </span>{% elif a.brouillon %}<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+ Brouillon
+ </span>{% else %}<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+ En cours
+ </span>{% endif %}
+</td>
+</tr>{% empty %}<tr><td class="py-6 px-6 text-center text-slate-400 text-xs" colspan="5">Aucun signalement enregistré.</td></tr>{% endfor %}
+
+
+</tbody>
+</table>
+</div>
+</div>
+<div class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 hidden transition-opacity duration-300" id="drawer-backdrop">
+<div class="fixed top-0 right-0 h-full w-full max-w-lg bg-white shadow-2xl z-50 flex flex-col justify-between overflow-y-auto transform translate-x-full transition-transform duration-300 ease-in-out" id="drawer-panel">
+
+<div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">tune</span>
+</div>
+<div>
+<h3 class="text-sm font-bold text-slate-900" id="drawer-title">Paramétrer le pôle territorial</h3>
+<span class="text-xs text-slate-500">Configuration comptable · régie de recettes</span>
+</div>
+</div>
+<button class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors" onclick="closeDrawer" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+
+<form action='{% url "ajouter_secteur" %}' class="p-6 space-y-4 flex-1 text-xs" id="sector-form" method="post">{% csrf_token %}
+<div class="grid grid-cols-3 gap-3">
+<div>
+<label class="block font-semibold text-slate-700 mb-1">Code court</label>
+<input class="w-full bg-slate-50 border border-slate-200 text-slate-800 px-3 py-2 rounded-lg font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500" id="input-code" name="code" placeholder="NORD" type="text"/>
+</div>
+<div class="col-span-2">
+<label class="block font-semibold text-slate-700 mb-1">Désignation du secteur</label>
+<input class="w-full bg-slate-50 border border-slate-200 text-slate-800 px-3 py-2 rounded-lg font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500" id="input-name" name="nom" required="required" type="text"/>
+</div>
+</div><div><label class="block text-xs font-semibold text-slate-700 mb-1">Pôle gestionnaire</label><input id="input-pole" name="pole" type="text" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500" placeholder="Ex. Voirie &amp; Domaine Public"></div>
+<div>
+<label class="block font-semibold text-slate-700 mb-1">Périmètre d'intervention</label>
+<textarea class="w-full bg-slate-50 border border-slate-200 text-slate-800 px-3 py-2 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none leading-relaxed" id="input-desc" name="description" rows="2"></textarea>
+</div>
+<div class="grid grid-cols-2 gap-3 pt-1">
+<div>
+<label class="block font-semibold text-slate-700 mb-1">Régisseur titulaire</label>
+<select class="w-full bg-slate-50 border border-slate-200 text-slate-800 px-3 py-2 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 cursor-pointer" id="select-regisseur" name="regisseur"><option value="">— Non désigné —</option>{% for u in utilisateurs %}<option value="{{ u.pk }}">{{ u.get_full_name|default:u.username }} ({{ u.profil.get_role_display }})</option>{% endfor %}</select>
+</div>
+<div>
+<label class="block font-semibold text-slate-700 mb-1">Mandataire suppléant</label>
+<select class="w-full bg-slate-50 border border-slate-200 text-slate-800 px-3 py-2 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 cursor-pointer" id="select-suppleant" name="suppleant"><option value="">— Non désigné —</option>{% for u in utilisateurs %}<option value="{{ u.pk }}">{{ u.get_full_name|default:u.username }} ({{ u.profil.get_role_display }})</option>{% endfor %}</select>
+</div>
+</div>
+<div class="p-3 bg-slate-50 rounded-lg border border-slate-200/80 space-y-1.5">
+<div class="flex items-center justify-between">
+<span class="font-semibold text-slate-700">Compte de dépôt (RIB / IBAN)</span>
+<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">Trésor</span>
+</div>
+<input class="w-full bg-white border border-slate-200 text-slate-800 font-mono text-[11px] px-3 py-1.5 rounded focus:outline-none focus:border-emerald-500" id="input-iban" name="iban" type="text"/>
+<p class="text-[11px] text-slate-500">Compte sur lequel sont versées les recettes de la régie.</p>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<div>
+<label class="block font-semibold text-slate-700 mb-1">Plafond légal d'encaissement (Ar)</label>
+<input class="w-full bg-slate-50 border border-slate-200 text-slate-800 px-3 py-2 rounded-lg font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500" id="input-threshold" min="0" name="plafond_encaissement" type="number" value="15000"/>
+</div>
+<div>
+<label class="block font-semibold text-slate-700 mb-1">Fréquence de reversement</label>
+<select class="w-full bg-slate-50 border border-slate-200 text-slate-800 px-3 py-2 rounded-lg focus:bg-white focus:outline-none cursor-pointer" id="select-freq" name="frequence_versement">{% for v,l in frequences %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
+</div>
+</div>
+</form>
+
+<div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
+<button class="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200/60 rounded-lg transition-colors" onclick="closeDrawer" type="button">
+ Annuler
+ </button>
+<div class="flex items-center gap-2">
+<button class="px-3.5 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors hidden" form="sector-form" id="btn-suspend" name="suspendre" type="submit" value="1">
+ Suspendre la régie
+ </button>
+<button class="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-all" form="sector-form" type="submit">
+ Enregistrer
+ </button>
+</div>
+</div>
+</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+ function openDrawer(btn){
+ var d=btn?btn.dataset:null, f=document.getElementById('sector-form');
+ document.getElementById('drawer-title').innerText = d ? 'Paramétrer · '+d.nom : 'Nouveau secteur territorial';
+ f.action = d ? '/secteurs/'+d.pk+'/modifier/' : '{% url "ajouter_secteur" %}';
+ var v=function(id,val){document.getElementById(id).value=val||'';};
+ v('input-code',d&&d.code); v('input-name',d&&d.nom); v('input-desc',d&&d.desc); v('input-pole',d&&d.pole);
+ v('select-regisseur',d&&d.regisseur); v('select-suppleant',d&&d.suppleant); v('input-iban',d&&d.iban);
+ v('input-threshold',d?d.plafond:'50000000'); v('select-freq',d?d.freq:'15');
+ var s=document.getElementById('btn-suspend'); if(s){ if(d&&d.actif==='1'){s.classList.remove('hidden');}else{s.classList.add('hidden');} }
+ var b=document.getElementById('drawer-backdrop'), p=document.getElementById('drawer-panel');
+ b.classList.remove('hidden'); setTimeout(function{p.classList.remove('translate-x-full');},10);
+ }
+ function openNew{ openDrawer(null); }
+ function closeDrawer{
+ var b=document.getElementById('drawer-backdrop'), p=document.getElementById('drawer-panel');
+ if(!p||!b) return; p.classList.add('translate-x-full'); setTimeout(function{b.classList.add('hidden');},300);
+ }
+ document.addEventListener('DOMContentLoaded',function{
+ var b=document.getElementById('drawer-backdrop');
+ if(b){ b.addEventListener('click',function(e){ if(e.target===b) closeDrawer; }); }
+ });
+</script>
+{% endblock %}

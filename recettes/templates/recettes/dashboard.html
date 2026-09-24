@@ -1,0 +1,167 @@
+{% extends "recettes/base.html" %}{% load formats %}
+{% block title %}Tableau de bord décisionnel{% endblock %}
+{% block body_class %}bg-[#F8FAFC] font-inter text-[#25272C]{% endblock %}
+{% block main_class %}w-full pt-4 px-8 pb-12{% endblock %}
+{% block content %}
+
+<div class="flex flex-col w-full gap-6 max-w-[1600px] mx-auto">
+<header class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-2">
+<span class="text-[11px] font-semibold tracking-wider uppercase text-[#9CA3AF] font-mono">Exercice {{ exercice }}</span>
+<span class="w-1 h-1 rounded-full bg-graphite-300"></span>
+<span class="text-[11px] text-[#9CA3AF] font-medium">Arrêté comptable mensuel · Repoblikan'i Madagasikara</span>
+</div>
+<h1 class="font-pjs text-2xl font-bold text-[#131417] tracking-tight">Tableau de bord décisionnel</h1>
+</div>
+<div class="flex items-center gap-2">
+<div class="flex items-center bg-white border border-[#E2E8F0] px-3 py-1.5 rounded-lg text-xs shadow-xs">
+<span class="material-symbols-outlined text-sm text-[#CBD5E1] mr-1.5">calendar_today</span>
+<select class="bg-transparent text-xs text-[#2F3238] font-medium focus:outline-none cursor-pointer pr-1" disabled="disabled">
+<option selected="">Exercice complet {{ exercice }}</option>
+
+
+</select>
+</div>
+{% if peut_voir_rapports %}<a class="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-[#F8FAFC] text-[#4B505A] border border-[#E2E8F0] rounded-lg text-xs font-medium transition-colors shadow-xs" href='{% url "rapport_pdf" %}'>
+<span class="material-symbols-outlined text-sm text-[#9CA3AF]">download</span>
+<span class="">Exporter</span>
+</a>{% endif %}
+{% if peut_saisir %}<a class="flex items-center gap-1.5 px-3 py-1.5 bg-[#131417] text-white hover:bg-[#2F3238] rounded-lg text-xs font-medium transition-colors shadow-xs" href='{% url "ajouter_recette" %}'>
+<span class="material-symbols-outlined text-sm">add</span>
+<span class="">Nouvelle recette</span>
+</a>{% endif %}
+</div>
+</header>
+
+{% if pire and pire.significatif %}<div class="flex items-center justify-between px-4 py-2.5 bg-white border border-[#FECACA] rounded-lg shadow-xs text-xs"><div class="flex items-center gap-2.5 truncate"><span class="w-2 h-2 rounded-full bg-[#EF4444] shrink-0"></span><span class="font-semibold text-[#131417]">Alerte {{ pire.categorie }} :</span><span class="text-[#6B7280] truncate">Écart de {{ pire.ecart_pct|pourcent_signe }} constaté sur {{ pire.categorie }} en {{ pire.mois|mois_fr }} ({{ pire.ecart_net|ariary }}). Objectif voté : {{ pire.cible|ariary }}.</span></div><a class="text-[#4B505A] hover:text-[#131417] font-medium shrink-0 ml-4 hover:underline text-xs flex items-center gap-1" href='{% url "liste_objectifs" %}'><span class="">Consulter</span><span class="material-symbols-outlined text-xs">chevron_right</span></a></div>{% endif %}
+
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+
+<div class="bg-white rounded-xl p-4 border border-[#E2E8F0] shadow-xs flex flex-col justify-between hover:border-graphite-300 transition-colors">
+<span class="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wider">Total Encaissé</span>
+<div class="my-2">
+<div class="font-mono text-2xl font-bold text-[#131417] tracking-tight">{{ total|ariary }}</div>
+</div>
+{% if variation_n1 is not None %}<div class="flex items-center gap-1.5 text-xs text-[#047857] font-medium">
+<span class="material-symbols-outlined text-sm">{% if variation_n1 >= 0 %}arrow_upward{% else %}arrow_downward{% endif %}</span>
+<span class="font-mono">{{ variation_n1|pourcent_signe }}</span>
+<span class="text-[#CBD5E1] font-normal">vs N-1</span>
+</div>{% endif %}
+</div>
+
+<div class="bg-white rounded-xl p-4 border border-[#E2E8F0] shadow-xs flex flex-col justify-between hover:border-graphite-300 transition-colors">
+<span class="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wider">Exécution du Budget</span>
+<div class="my-2">
+<div class="font-mono text-2xl font-bold text-[#131417] tracking-tight">{{ execution.taux_pct|pourcent }}</div>
+</div>
+<div class="w-full bg-[#F1F5F9] h-1.5 rounded-full overflow-hidden mt-1">
+<div class="bg-[#1E2024] h-full rounded-full" style="width: {% if execution.taux_pct %}{% if execution.taux_pct > 100 %}100{% else %}{{ execution.taux_pct|floatformat:0 }}{% endif %}{% else %}0{% endif %}%"></div>
+</div>
+</div>
+
+<div class="bg-white rounded-xl p-4 border border-[#E2E8F0] shadow-xs flex flex-col justify-between hover:border-graphite-300 transition-colors">
+<span class="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wider">Écart Budgétaire</span>
+<div class="my-2">
+<div class="font-mono text-2xl font-bold text-[#DC2626] tracking-tight">{{ pire.ecart_net|ariary }}</div>
+</div>
+<div class="flex items-center gap-1.5 text-xs text-[#DC2626] font-medium">
+<span class="material-symbols-outlined text-sm">warning</span>
+<span class="">{% if pire %}{% if pire.ecart_pct < 0 %}Sous-réalisation{% else %}Surréalisation{% endif %} · {{ pire.mois|mois_fr }}{% else %}Aucun écart mesuré{% endif %}</span>
+</div>
+</div>
+
+<div class="bg-white rounded-xl p-4 border border-[#E2E8F0] shadow-xs flex flex-col justify-between hover:border-graphite-300 transition-colors">
+<span class="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wider">Anomalies de recouvrement</span>
+<div class="my-2">
+<div class="font-mono text-2xl font-bold text-[#131417] tracking-tight">{{ anomalies_ouvertes_total }}<span class="text-xs font-normal text-[#9CA3AF]">dossier{{ anomalies_ouvertes_total|pluralize }} actif{{ anomalies_ouvertes_total|pluralize }}</span></div>
+</div>
+<div class="flex items-center gap-1.5 text-xs text-[#9CA3AF]">
+<span class="w-1.5 h-1.5 rounded-full bg-[#CBD5E1]"></span>
+<span class="">{{ montant_anomalies|ariary }} en suspens</span>
+</div>
+</div>
+</div>
+
+<div class="bg-white rounded-xl border border-[#E2E8F0] shadow-xs overflow-hidden">
+<div class="px-5 py-3.5 border-b border-[#F1F5F9] flex items-center justify-between">
+<h2 class="font-pjs text-sm font-bold text-[#131417]">Recouvrement par secteur</h2>
+<span class="text-[11px] font-mono text-[#CBD5E1]">{{ suivi_secteurs.total|ariary }} consolidé</span>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left text-xs">
+<thead>
+<tr class="text-[11px] font-semibold text-[#CBD5E1] uppercase tracking-wider border-b border-[#F1F5F9] bg-[#F8FAFC]/50">
+<th class="py-2.5 px-5">Secteur</th>
+<th class="py-2.5 px-4 text-right">Encaissé</th>
+<th class="py-2.5 px-4 text-right">Part</th>
+<th class="py-2.5 px-5 text-right">Statut</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-[#F1F5F9] font-normal">{% for l in suivi_secteurs.lignes %}<tr class="hover:bg-[#F8FAFC]/50 transition-colors"><td class="py-3 px-5 text-[#1E2024] font-medium">{{ l.secteur.nom }}</td><td class="py-3 px-4 text-right font-mono font-medium text-[#1E2024]">{{ l.total|ariary }}</td><td class="py-3 px-4 text-right font-mono text-[#6B7280]">{{ l.part_pct|floatformat:0 }} %</td><td class="py-3 px-5 text-right">{% if l.anomalies_ouvertes %}<span class="inline-flex items-center gap-1.5 text-[#DC2626] font-medium text-[11px]"><span class="w-1.5 h-1.5 rounded-full bg-[#EF4444]"></span>À surveiller</span>{% else %}<span class="text-[#CBD5E1] text-[11px]">Conforme</span>{% endif %}</td></tr>{% endfor %}</tbody>
+</table>
+</div>
+</div>
+
+<div class="bg-white rounded-xl border border-[#E2E8F0] shadow-xs">
+<div class="px-5 py-3.5 border-b border-[#F1F5F9] flex items-center justify-between">
+<div>
+<h2 class="font-pjs text-sm font-bold text-[#131417]">Recettes réalisées vs prévues</h2>
+<p class="text-[11px] text-[#9CA3AF]">Historique mensuel et projection à {{ horizon }} mois, par catégorie</p>
+</div>
+</div>
+{% if not data_json or data_json == "{}" %}
+<div class="m-5 px-4 py-3 rounded-lg bg-[#FFFBEB] border border-[#FDE68A] text-[#92400E] text-xs">
+Aucune donnée disponible. Lancez d'abord : <code class="font-mono">python manage.py generer_donnees_fictives</code>
+</div>
+{% endif %}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4" id="conteneur-graphiques"></div>
+</div>
+
+<footer class="pt-2 pb-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-[#CBD5E1] text-xs border-t border-[#E2E8F0]/80">
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-[#10B981]"></span>
+<span class="">Données issues des recettes enregistrées · Exercice {{ exercice }} · Prévisions recalculées à chaque saisie</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-mono text-[11px]">Modèle : régression + saisonnalité</span>
+</div>
+</footer></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+ const data = {{ data_json|safe }};
+ const conteneur = document.getElementById("conteneur-graphiques");
+
+ Object.entries(data).forEach(([code, serie]) => {
+ const col = document.createElement("div");
+ col.className = "bg-white rounded-lg border border-[#F1F5F9] p-4";
+ col.innerHTML = `
+ <h3 class="font-pjs text-sm font-bold text-[#131417] mb-2">${serie.label}</h3>
+ <canvas id="chart-${code}"></canvas>`;
+ conteneur.appendChild(col);
+
+ const labels = [...serie.mois_historique,...serie.mois_prevus];
+
+ const historique = [...serie.montants_historique,...Array(serie.mois_prevus.length).fill(null)];
+ const prevu = [...Array(serie.mois_historique.length - 1).fill(null),
+ serie.montants_historique[serie.montants_historique.length - 1],
+...serie.montants_prevus];
+
+ new Chart(document.getElementById(`chart-${code}`), {
+ type: "line",
+ data: {
+ labels: labels,
+ datasets: [
+ { label: "Réalisé", data: historique, borderColor: "#0d6efd", tension: 0.2 },
+ { label: "Prévu", data: prevu, borderColor: "#dc3545", borderDash: [6, 4], tension: 0.2 },
+ ],
+ },
+ options: { responsive: true, plugins: { legend: { position: "bottom" } } },
+ });
+ });
+</script>
+{% endblock %}
+{% block scripts %}
+
+{% endblock %}

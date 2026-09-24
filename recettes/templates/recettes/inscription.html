@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Demande d'habilitation · PréviRecettes</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<script>tailwind.config = { theme: { extend: { fontFamily: { inter: ['Inter','sans-serif'], pjs: ['Plus Jakarta Sans','sans-serif'] } } } };</script>
+<style>
+html,body{margin:0;padding:0;}
+.champ{width:100%;border-radius:.5rem;border:1px solid #D1D5DB;background:#F9FAFB;padding:.6rem.85rem;font-size:.85rem;color:#1E2024;}
+.champ:focus{outline:none;box-shadow:0 0 0 2px rgba(19,20,23,.1);border-color:#131417;}
+.libelle{display:block;font-size:.75rem;font-weight:600;color:#374151;margin-bottom:.35rem;}
+</style>
+</head>
+<body class="bg-[#EDEDED] font-inter text-[#1F2124] antialiased min-h-screen flex flex-col">
+<header class="h-[84px] bg-white border-b border-[#E2E8F0] flex items-stretch">
+<div class="flex items-center gap-2.5 px-6 border-r border-[#E2E8F0]">
+{% include "recettes/_drapeau.html" %}
+<div class="flex flex-col leading-none">
+<span class="text-[11px] font-semibold text-[#1F2124] tracking-wide">REPOBLIKAN'I</span>
+<span class="text-[11px] text-[#6B7280]">Madagasikara</span>
+</div>
+</div>
+<div class="flex items-center gap-3 px-6">
+<div class="w-9 h-9 rounded-lg bg-[#EDEDED] flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[#131417] text-xl">trending_up</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-pjs text-sm font-extrabold text-[#131417] tracking-tight leading-none">PRÉVI<span class="font-medium">RECETTES</span></span>
+<span class="text-[9px] text-[#9CA3AF] font-semibold tracking-[0.12em] uppercase">Collectivité territoriale</span>
+</div>
+</div>
+</header>
+
+<main class="flex-1 py-10 px-4">
+<div class="max-w-[860px] mx-auto">
+
+<div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
+<div>
+<h1 class="font-pjs text-2xl font-bold text-[#131417]">Demande d'habilitation territoriale</h1>
+<p class="text-sm text-[#6B7280] mt-1">Complétez ce formulaire pour soumettre votre affectation à l'administrateur pour validation.</p>
+</div>
+<div class="flex items-center gap-2 text-[11px] font-semibold text-[#6B7280] shrink-0">
+<span class="w-5 h-5 rounded-full bg-[#131417] text-white flex items-center justify-center">1</span><span>Identité</span>
+<span class="text-[#D1D5DB]"></span>
+<span class="w-5 h-5 rounded-full border border-[#D1D5DB] flex items-center justify-center">2</span><span>Affectation</span>
+<span class="text-[#D1D5DB]"></span>
+<span class="w-5 h-5 rounded-full border border-[#D1D5DB] flex items-center justify-center">3</span><span>Sécurité</span>
+</div>
+</div>
+
+{% if confirmation %}
+<div class="bg-white border border-[#BBF7D0] rounded-2xl shadow-sm p-8 text-center">
+<div class="w-12 h-12 rounded-full bg-[#ECFDF5] border border-[#BBF7D0] flex items-center justify-center mx-auto mb-4">
+<span class="material-symbols-outlined text-[#047857] text-2xl">check</span>
+</div>
+<h2 class="font-pjs text-xl font-bold text-[#131417]">Demande transmise</h2>
+<p class="text-sm text-[#4B5563] mt-2">Votre référence de demande est <span class="font-mono font-semibold text-[#131417]">{{ confirmation }}</span>. Elle sera instruite par l'administrateur ; vous recevrez un courriel dès l'activation de votre compte.</p>
+<a href="{% url 'connexion' %}" class="mt-6 inline-block bg-[#131417] hover:bg-[#2F3238] text-white text-sm font-semibold rounded-lg px-6 py-2.5 transition-colors">Retour à la connexion</a>
+</div>
+{% else %}
+
+{% if form.non_field_errors %}
+<div class="mb-4 px-3 py-2.5 rounded-lg bg-[#FEF2F2] border border-[#FECACA] text-[#B91C1C] text-xs">
+{% for e in form.non_field_errors %}{{ e }}{% endfor %}
+</div>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data" class="flex flex-col gap-4">
+{% csrf_token %}
+
+<div class="bg-white border border-[#E2E8F0] rounded-2xl p-6">
+<div class="flex items-center gap-2.5 mb-4 pb-3 border-b border-[#F1F5F9]">
+<span class="w-7 h-7 rounded-md border border-[#131417] bg-white flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-[16px] text-[#131417]">badge</span></span>
+<div>
+<h3 class="font-pjs text-sm font-bold text-[#131417]">1. Informations de l'agent public</h3>
+<p class="text-[11px] text-[#9CA3AF]">Renseignez vos coordonnées administratives officielles</p>
+</div>
+</div>
+<div class="grid sm:grid-cols-2 gap-4">
+<div><label class="libelle" for="{{ form.first_name.id_for_label }}">Prénom</label>{{ form.first_name }}{% if form.first_name.errors %}<p class="text-xs text-[#DC2626] mt-1">{{ form.first_name.errors.0 }}</p>{% endif %}</div>
+<div><label class="libelle" for="{{ form.last_name.id_for_label }}">Nom de famille</label>{{ form.last_name }}{% if form.last_name.errors %}<p class="text-xs text-[#DC2626] mt-1">{{ form.last_name.errors.0 }}</p>{% endif %}</div>
+<div><label class="libelle" for="{{ form.email.id_for_label }}">Courriel professionnel</label>{{ form.email }}{% if form.email.errors %}<p class="text-xs text-[#DC2626] mt-1">{{ form.email.errors.0 }}</p>{% endif %}</div>
+<div><label class="libelle" for="{{ form.telephone.id_for_label }}">Téléphone de service</label>{{ form.telephone }}</div>
+<div class="sm:col-span-2"><label class="libelle" for="{{ form.matricule.id_for_label }}">Matricule interne territorial</label>{{ form.matricule }}{% if form.matricule.errors %}<p class="text-xs text-[#DC2626] mt-1">{{ form.matricule.errors.0 }}</p>{% endif %}<p class="text-[11px] text-[#9CA3AF] mt-1">Figure sur votre bulletin de salaire ou arrêté de nomination.</p></div>
+</div>
+</div>
+
+<div class="bg-white border border-[#E2E8F0] rounded-2xl p-6">
+<div class="flex items-center gap-2.5 mb-4 pb-3 border-b border-[#F1F5F9]">
+<span class="w-7 h-7 rounded-md border border-[#131417] bg-white flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-[16px] text-[#131417]">account_balance</span></span>
+<div>
+<h3 class="font-pjs text-sm font-bold text-[#131417]">2. Rôle et affectation</h3>
+<p class="text-[11px] text-[#9CA3AF]">Définissez votre fonction et votre secteur de rattachement</p>
+</div>
+</div>
+<div class="grid sm:grid-cols-2 gap-4">
+<div><label class="libelle" for="{{ form.role.id_for_label }}">Fonction sollicitée</label>{{ form.role }}{% if form.role.errors %}<p class="text-xs text-[#DC2626] mt-1">{{ form.role.errors.0 }}</p>{% endif %}</div>
+<div><label class="libelle" for="{{ form.secteur.id_for_label }}">Pôle géographique de rattachement</label>{{ form.secteur }}</div>
+<div class="sm:col-span-2">
+<label class="libelle" for="{{ form.piece_nomination.id_for_label }}">Arrêté de nomination ou mandat délibératif</label>
+<div class="flex items-center gap-3 border border-dashed border-[#D1D5DB] rounded-lg px-4 py-3 bg-[#F9FAFB]">
+<span class="material-symbols-outlined text-[#6B7280]">upload_file</span>
+<span class="text-xs text-[#6B7280] flex-1">Format PDF, image ou bordereau (max. 10 Mo)</span>
+{{ form.piece_nomination }}
+</div>
+{% if form.piece_nomination.errors %}<p class="text-xs text-[#DC2626] mt-1">{{ form.piece_nomination.errors.0 }}</p>{% endif %}
+</div>
+</div>
+</div>
+
+<div class="bg-white border border-[#E2E8F0] rounded-2xl p-6">
+<div class="flex items-center gap-2.5 mb-4 pb-3 border-b border-[#F1F5F9]">
+<span class="w-7 h-7 rounded-md border border-[#131417] bg-white flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-[16px] text-[#131417]">shield_lock</span></span>
+<div>
+<h3 class="font-pjs text-sm font-bold text-[#131417]">3. Sécurité & engagement déontologique</h3>
+<p class="text-[11px] text-[#9CA3AF]">Paramétrez vos identifiants d'accès sécurisé</p>
+</div>
+</div>
+<div class="grid sm:grid-cols-2 gap-4">
+<div><label class="libelle" for="{{ form.password1.id_for_label }}">Mot de passe</label>{{ form.password1 }}{% if form.password1.errors %}<p class="text-xs text-[#DC2626] mt-1">{{ form.password1.errors.0 }}</p>{% endif %}</div>
+<div><label class="libelle" for="{{ form.password2.id_for_label }}">Confirmation du mot de passe</label>{{ form.password2 }}{% if form.password2.errors %}<p class="text-xs text-[#DC2626] mt-1">{{ form.password2.errors.0 }}</p>{% endif %}</div>
+</div>
+<p class="text-[11px] text-[#9CA3AF] mt-1.5">Au moins 8 caractères, avec lettres et chiffres.</p>
+<label class="flex items-start gap-2.5 text-xs text-[#4B5563] mt-4 pt-4 border-t border-[#F1F5F9] cursor-pointer">
+{{ form.deontologie }}
+<span>Je certifie sur l'honneur l'exactitude des informations transmises et m'engage à respecter les règles de séparation de l'ordonnateur et du comptable, ainsi que le secret professionnel applicable aux deniers publics.</span>
+</label>
+{% if form.deontologie.errors %}<p class="text-xs text-[#DC2626] mt-1">{{ form.deontologie.errors.0 }}</p>{% endif %}
+</div>
+
+<div class="flex items-center justify-between pt-1">
+<a class="text-xs text-[#6B7280] hover:text-[#131417] hover:underline" href="{% url 'connexion' %}">← Déjà un compte agent ? Se connecter</a>
+<button type="submit" class="bg-[#131417] hover:bg-[#2F3238] text-white text-sm font-semibold rounded-lg px-6 py-3 transition-colors">Transmettre ma demande d'accès →</button>
+</div>
+</form>
+{% endif %}
+</div>
+</main>
+</body></html>

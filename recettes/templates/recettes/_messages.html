@@ -1,0 +1,12 @@
+{% if messages %}
+<div id="toast-stack" class="fixed bottom-6 right-6 flex flex-col gap-2 z-[60]">
+{% for message in messages %}
+<div class="toast flex items-center gap-3 bg-[#1E2024] text-white px-4 py-3 rounded-xl shadow-xl border border-[#32363D] max-w-md transition-all duration-300" role="status">
+<span class="w-2 h-2 shrink-0 rounded-full {% if message.level_tag == 'error' %}bg-[#EF4444]{% else %}bg-[#7CECC9]{% endif %}"></span>
+<span class="text-xs font-medium text-white">{{ message }}</span>
+<button type="button" class="ml-2 text-[#949BA6] hover:text-white" onclick="this.closest('.toast').remove"><span class="material-symbols-outlined text-base">close</span></button>
+</div>
+{% endfor %}
+</div>
+<script>setTimeout(function{var s=document.getElementById('toast-stack');if(s){s.style.opacity='0';setTimeout(function{s.remove},400)}},7000)</script>
+{% endif %}

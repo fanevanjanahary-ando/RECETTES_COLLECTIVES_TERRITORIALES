@@ -1,0 +1,58 @@
+{% extends "recettes/base.html" %}{% load formats %}
+{% block title %}Paramétrage du modèle{% endblock %}
+{% block main_class %}max-w-3xl mx-auto w-full px-8 pb-12 pt-4{% endblock %}
+{% block content %}
+<nav class="text-xs text-[#9CA3AF] mb-2 flex items-center gap-1.5">
+ <span>Administration</span><span class="material-symbols-outlined text-[14px]">chevron_right</span><span class="text-[#1E2024] font-medium">Paramétrage du modèle</span>
+</nav>
+<div class="flex items-center gap-3 mb-6">
+ <div class="w-11 h-11 rounded-xl bg-[#1E2024] flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-[#B8F7E4] text-xl">tune</span></div>
+ <div>
+ <h1 class="font-pjs text-xl font-bold text-[#1E2024]">Paramétrage du modèle de prévision</h1>
+ <p class="text-xs text-[#6B7280] mt-0.5">Ces réglages s'appliquent immédiatement aux prévisions, aux alertes et aux notifications.</p>
+ </div>
+</div>
+
+<form method="post" class="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6 flex flex-col gap-6">
+ {% csrf_token %}
+ {% if form.non_field_errors %}<div class="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs text-red-700">{{ form.non_field_errors }}</div>{% endif %}
+
+ <div>
+ <label class="block text-xs font-semibold text-[#1E2024] mb-1" for="{{ form.mois_a_prevoir.id_for_label }}">Horizon de prévision (mois)</label>
+ <p class="text-[11px] text-[#9CA3AF] mb-1.5">Nombre de mois projetés par le modèle sur le tableau de bord et le budget.</p>
+ {{ form.mois_a_prevoir }}
+ {% if form.mois_a_prevoir.errors %}<p class="text-xs text-red-600 mt-1">{{ form.mois_a_prevoir.errors.0 }}</p>{% endif %}
+ </div>
+
+ <div>
+ <label class="block text-xs font-semibold text-[#1E2024] mb-1" for="{{ form.historique_minimum.id_for_label }}">Historique minimum requis (mois)</label>
+ <p class="text-[11px] text-[#9CA3AF] mb-1.5">Un compte avec moins de mois d'historique que ce seuil n'est pas prévu.</p>
+ {{ form.historique_minimum }}
+ {% if form.historique_minimum.errors %}<p class="text-xs text-red-600 mt-1">{{ form.historique_minimum.errors.0 }}</p>{% endif %}
+ </div>
+
+ <div>
+ <label class="block text-xs font-semibold text-[#1E2024] mb-1" for="{{ form.seuil_alerte_pct.id_for_label }}">Seuil d'alerte sur écart budgétaire (%)</label>
+ <p class="text-[11px] text-[#9CA3AF] mb-1.5">Au-delà de ce pourcentage d'écart entre réalisé et objectif voté, une alerte est déclenchée.</p>
+ {{ form.seuil_alerte_pct }}
+ {% if form.seuil_alerte_pct.errors %}<p class="text-xs text-red-600 mt-1">{{ form.seuil_alerte_pct.errors.0 }}</p>{% endif %}
+ </div>
+
+ <div>
+ <label class="block text-xs font-semibold text-[#1E2024] mb-1" for="{{ form.jour_echeance_recouvrement.id_for_label }}">Jour d'échéance mensuelle de recouvrement</label>
+ <p class="text-[11px] text-[#9CA3AF] mb-1.5">Jour du mois utilisé comme repère pour les rappels d'échéance.</p>
+ {{ form.jour_echeance_recouvrement }}
+ {% if form.jour_echeance_recouvrement.errors %}<p class="text-xs text-red-600 mt-1">{{ form.jour_echeance_recouvrement.errors.0 }}</p>{% endif %}
+ </div>
+
+ <label class="flex items-center gap-2.5 text-sm text-[#1E2024] font-medium cursor-pointer">
+ {{ form.notifications_email_actives }}
+ Envoyer les notifications par e-mail (en plus du centre de notifications)
+ </label>
+
+ <div class="flex items-center justify-between pt-4 border-t border-[#E2E8F0]">
+ <span class="text-[11px] text-[#9CA3AF]">Dernière modification : {% if parametres.date_modification %}{{ parametres.date_modification|date:"d/m/Y H:i" }}{% if parametres.modifie_par %} par {{ parametres.modifie_par.get_full_name|default:parametres.modifie_par.username }}{% endif %}{% else %}jamais modifié{% endif %}</span>
+ <button type="submit" class="px-5 py-2.5 rounded-lg bg-[#1E2024] text-white hover:bg-[#25272C] text-xs font-semibold shadow-sm transition-colors">Enregistrer</button>
+ </div>
+</form>
+{% endblock %}

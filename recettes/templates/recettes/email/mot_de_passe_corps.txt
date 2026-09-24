@@ -1,0 +1,12 @@
+{% autoescape off %}Bonjour,
+
+Vous recevez ce message car un lien de création / réinitialisation de mot de passe a été demandé pour le compte {{ email }} sur la plateforme « Recettes Collectives ».
+
+Cliquez sur le lien ci-dessous pour choisir un nouveau mot de passe (lien à usage unique) :
+
+{{ protocol }}://{{ domain }}{% url 'password_reset_confirm' uidb64=uid token=token %}
+
+Si vous n'êtes pas à l'origine de cette demande, ignorez simplement ce message.
+
+— Recettes Collectives · Collectivité Territoriale
+{% endautoescape %}

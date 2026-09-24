@@ -1,0 +1,213 @@
+{% extends "recettes/base.html" %}{% load formats %}
+{% block title %}Objectifs budgétaires & écarts{% endblock %}
+{% block body_class %}bg-[#F8FAFC] font-pjs text-slate-800{% endblock %}
+{% block main_class %}w-full pt-4 bg-[#F8FAFC] min-h-screen px-8 pb-10{% endblock %}
+{% block content %}
+<div class="flex flex-col w-full gap-6">
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-slate-200/80">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-2 text-xs text-slate-500 font-mono"><span class="">Instruction Budgétaire CTD</span><span class=""></span><span class="">Exercice {{ annee }}</span><span class=""></span><span class="text-slate-700 font-medium">Suivi des réalisations (Madagascar)</span></div>
+<h1 class="text-2xl text-[#1E2024] font-bold tracking-tight">Objectifs budgétaires &amp; Écarts</h1>
+<p class="text-xs text-slate-500">Comparaison mensuelle entre prévisions votées par délibération et encaissements constatés au grand livre.</p>
+</div>
+<div class="flex items-center gap-3">
+<a class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-medium hover:bg-slate-50 transition-colors" href='{% url "export_csv" "ecarts" %}'>
+<span class="material-symbols-outlined text-base text-slate-500">download</span>
+<span class="">Exporter synthèse</span>
+</a>
+{% if peut_gerer %}<a class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#25272C] text-[#B8F7E4] hover:bg-[#1E2024] text-xs font-semibold shadow-sm transition-colors" href='{% url "ajouter_objectif" %}'>
+<span class="material-symbols-outlined text-base">add</span>
+<span class="">Nouvel objectif</span>
+</a>{% endif %}
+</div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+<div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col justify-between hover:border-slate-300 transition-colors">
+<div class="flex items-center justify-between text-slate-500 text-xs font-medium">
+<span class="">Taux de réalisation</span>
+<span class="material-symbols-outlined text-slate-400 text-lg">donut_large</span>
+</div>
+<div class="mt-3 mb-2 flex items-baseline gap-2">
+<span class="text-2xl font-bold font-mono text-slate-900">{{ taux|pourcent }}</span>
+
+</div>
+<span class="text-xs text-slate-500 font-mono">{{ total_realise|ariary }} encaissés sur {{ total_cible|ariary }}</span>
+</div>
+<div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col justify-between hover:border-slate-300 transition-colors">
+<div class="flex items-center justify-between text-slate-500 text-xs font-medium">
+<span class="">Écart net global</span>
+<span class="material-symbols-outlined text-slate-400 text-lg">trending_down</span>
+</div>
+<div class="mt-3 mb-2 flex items-baseline gap-2">
+<span class="text-2xl font-bold font-mono text-rose-600">{{ ecart_net|ariary }}</span>
+<span class="text-[11px] text-rose-600 font-mono font-medium">{{ ecart_net_pct|pourcent_signe }}</span>
+</div>
+<span class="text-xs text-slate-500">Consolidé · {{ mois_label }}</span>
+</div>
+<div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col justify-between hover:border-slate-300 transition-colors">
+<div class="flex items-center justify-between text-slate-500 text-xs font-medium">
+<span class="">Point d'attention</span>
+<span class="material-symbols-outlined text-rose-500 text-lg">priority_high</span>
+</div>
+<div class="mt-3 mb-2 flex items-baseline gap-2">
+<span class="text-2xl font-bold font-mono text-slate-900">{{ nb_alertes }} poste{{ nb_alertes|pluralize }}</span>
+<span class="text-[11px] text-rose-600 font-medium">{% if pire %}{{ pire.categorie|truncatechars:22 }} ({{ pire.ecart_pct|pourcent_signe:0 }}){% else %}RAS{% endif %}</span>
+</div>
+<span class="text-xs text-slate-500">{% if pire %}Écart supérieur au seuil de {{ parametres.seuil_alerte_pct }} %{% else %}Aucun écart significatif{% endif %}</span>
+</div>
+<div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col justify-between hover:border-slate-300 transition-colors">
+<div class="flex items-center justify-between text-slate-500 text-xs font-medium">
+<span class="">Fiabilité prévisionnelle</span>
+<span class="material-symbols-outlined text-slate-400 text-lg">check_circle</span>
+</div>
+<div class="mt-3 mb-2 flex items-baseline gap-2">
+<span class="text-2xl font-bold font-mono text-slate-900">{{ fiabilite|pourcent }}</span>
+<span class="text-[11px] text-[#065F46] font-medium font-mono">rétro-test</span>
+</div>
+<span class="text-xs text-slate-500">Modèle testé sur les 3 derniers mois</span>
+</div>
+</div>
+
+<div class="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-sm">
+<form action='{% url "liste_objectifs" %}' class="flex items-center gap-3 w-full sm:w-auto" method="get">
+<div class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg">
+<span class="material-symbols-outlined text-slate-400 text-base">calendar_today</span>
+<select class="bg-transparent text-xs text-slate-800 font-medium focus:outline-none cursor-pointer pr-2" id="filterMonth" name="mois" onchange="this.form.submit">{% for mm in mois_dispo %}<option value="{{ mm|date:"Y-m" }}"{% if choix_mois == mm|date:"Y-m" %} selected{% endif %}>{{ mm|mois_fr|capfirst }}</option>{% endfor %}<option value="tous"{% if choix_mois == "tous" %} selected{% endif %}>Tous les mois {{ annee }}</option></select>
+</div>
+<div class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg">
+<span class="material-symbols-outlined text-slate-400 text-base">filter_list</span>
+<select class="bg-transparent text-xs text-slate-800 font-medium focus:outline-none cursor-pointer pr-2" id="filterCategory" name="categorie" onchange="this.form.submit"><option value="">Tous les postes</option>{% for c in categories %}<option value="{{ c.pk }}"{% if categorie_filtre == c.pk|stringformat:"s" %} selected{% endif %}>{{ c.libelle_complet }}</option>{% endfor %}</select>
+</div>
+</form>
+<div class="relative w-full sm:w-72">
+<span class="material-symbols-outlined absolute left-3 top-2 text-slate-400 text-base">search</span>
+<input class="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-300 transition-colors" id="tableSearchInput" placeholder="Rechercher un poste ou compte..." type="text"/>
+</div>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+
+<div class="xl:col-span-8 flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+<div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+<div>
+<h2 class="text-sm font-bold text-slate-900">Écarts d'exécution budgétaire</h2>
+<p class="text-xs text-slate-500 mt-0.5">Cibles adoptées vs recettes réelles enregistrées en comptabilité</p>
+</div>
+<span class="text-xs font-mono text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md">{{ mois_label }}</span>
+</div>
+<div class="overflow-x-auto w-full">
+<table class="w-full text-left font-pjs text-xs">
+<thead>
+<tr class="bg-slate-50 text-slate-500 font-mono text-[11px] border-b border-slate-200">
+<th class="py-3 px-4 font-semibold" scope="col">Chapitre &amp; Imputation</th>
+<th class="py-3 px-4 font-semibold text-right" scope="col">Objectif voté</th>
+<th class="py-3 px-4 font-semibold text-right" scope="col">Réalisé</th>
+<th class="py-3 px-4 font-semibold text-right" scope="col">Écart net</th>
+<th class="py-3 px-4 font-semibold text-center" scope="col">Situation</th>
+<th class="py-3 px-4 font-semibold text-right" scope="col">Détail</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100" id="objectivesTableBody">
+
+{% for e in ecarts %}<tr class="hover:bg-slate-50/70 transition-colors" data-status="{% if e.significatif %}ALERT{% else %}OK{% endif %}"><td class="py-3.5 px-4"><div class="flex flex-col"><span class="font-semibold text-slate-900">{{ e.categorie }}</span><span class="text-[11px] text-slate-400 font-mono">Compte {{ e.code|default:"—" }}{% if e.secteur %} · {{ e.secteur }}{% endif %}{% if choix_mois == "tous" %} · {{ e.mois|mois_fr }}{% endif %}</span></div></td><td class="py-3.5 px-4 text-right font-mono text-slate-700">{{ e.cible|ariary }}</td><td class="py-3.5 px-4 text-right font-mono font-semibold text-slate-900">{{ e.realise|ariary }}</td><td class="py-3.5 px-4 text-right">{% if e.significatif %}<div class="flex flex-col items-end"><span class="font-bold font-mono text-rose-600">{{ e.ecart_pct|pourcent_signe }}</span><span class="text-[10px] font-mono text-slate-400">{{ e.ecart_net|ariary }}</span></div>{% else %}<div class="flex flex-col items-end"><span class="font-semibold font-mono text-slate-700">{{ e.ecart_pct|pourcent_signe }}</span><span class="text-[10px] font-mono text-slate-400">{{ e.ecart_net|ariary }}</span></div>{% endif %}</td><td class="py-3.5 px-4 text-center">{% if e.significatif %}<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium text-rose-700 bg-rose-50 border border-rose-200"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Écart : {{ e.sens }}</span>{% else %}<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200/60"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Conforme</span>{% endif %}</td><td class="py-3.5 px-4 text-right"><a class="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors" href='{% url "liste_recettes" %}?categorie={{ e.categorie_id }}&amp;periode={{ e.mois|date:"Y-m" }}' title="Examiner"><span class="material-symbols-outlined text-base">chevron_right</span></a></td></tr>{% empty %}<tr><td class="py-8 text-center text-slate-400 text-sm" colspan="6">Aucun objectif budgétaire pour ces critères.</td></tr>{% endfor %}
+
+
+
+
+
+
+</tbody>
+<tfoot>
+<tr class="bg-slate-50 border-t border-slate-200 font-mono text-xs">
+<td class="py-3.5 px-4 font-bold text-slate-800">Total cumulé</td>
+<td class="py-3.5 px-4 text-right font-bold text-slate-700" id="totalVotedDisplay">{{ total_cible|ariary }}</td>
+<td class="py-3.5 px-4 text-right font-bold text-slate-900" id="totalRealizedDisplay">{{ total_realise|ariary }}</td>
+<td class="py-3.5 px-4 text-right font-bold text-rose-600" id="totalVarianceDisplay">{{ ecart_net_pct|pourcent_signe }}</td>
+<td class="py-3.5 px-4 text-center text-slate-500" colspan="2">{{ nb_alertes }} poste{{ nb_alertes|pluralize }} en écart</td>
+</tr>
+</tfoot>
+</table>
+</div>
+</div>
+
+<div class="xl:col-span-4 flex flex-col gap-4">
+
+<div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex flex-col gap-4">
+<div class="flex items-center justify-between pb-3 border-b border-slate-100">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-700 text-lg">query_stats</span>
+<span class="text-sm font-bold text-slate-900">Projection Atterrissage Q3-Q4</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono text-[10px]">Modèle tendanciel</span>
+</div>
+<p class="text-xs text-slate-500 leading-relaxed">Trajectoire globale estimée par régression linéaire et saisonnalité mensuelle, confrontée à l'objectif voté (pointillés).</p>
+
+<div class="bg-slate-50 rounded-lg p-3 border border-slate-200/80">
+<div class="w-full h-24 relative">
+{{ svg_projection }}
+<div class="flex justify-between text-[10px] font-mono text-slate-400 pt-1">
+<span class="">{{ proj_mois.0|date:"M"|capfirst }}</span>
+<span class="">{{ proj_mois.1|date:"M"|capfirst }}</span>
+<span class="">{{ proj_mois.2|date:"M"|capfirst }}</span>
+<span class="text-rose-600 font-semibold">{{ proj_mois.3|date:"M"|capfirst }}</span>
+<span class="">{{ proj_mois.4|date:"M"|capfirst }}</span>
+<span class="">{{ proj_mois.5|date:"M"|capfirst }}</span>
+</div>
+</div>
+</div>
+</div>
+
+<div class="bg-[#25272C] text-white rounded-xl p-5 border border-[#343840] shadow-sm flex flex-col gap-3.5">
+<div class="flex items-center gap-2 text-[#B8F7E4]">
+<span class="material-symbols-outlined text-lg">flag</span>
+<span class="text-xs font-bold uppercase tracking-wider font-mono">Arbitrage suggéré</span>
+</div>
+<p class="text-xs text-slate-300 leading-relaxed">{% if pire %}Le décalage sur <strong>{{ pire.categorie }} ({{ pire.ecart_net|ariary }})</strong> peut être notifié aux responsables pour suivi de trésorerie sans requérir de délibération modificative immédiate.{% else %}Aucun écart significatif à arbitrer pour cette sélection.{% endif %}</p>
+<div class="flex items-center gap-2 pt-1">
+<form action="{% url 'declencher_notifications' %}" class="inline" method="post">{% csrf_token %}<input type="hidden" name="next" value="{% url 'liste_objectifs' %}"><button class="flex-1 py-2 px-3 rounded-lg bg-[#B8F7E4] text-[#15171A] text-xs font-bold hover:bg-[#A3F2DB] transition-colors flex items-center justify-center gap-1.5" type="submit">
+<span class="material-symbols-outlined text-sm">send</span>
+<span class="">Aviser l'ordonnateur</span>
+</button></form>
+<a class="py-2 px-3 rounded-lg bg-[#343840] hover:bg-[#4B515D] text-slate-200 text-xs font-medium transition-colors" href='{% url "rapports" %}'>
+ Rapport
+ </a>
+</div>
+</div>
+</div>
+</div><div class="xl:col-span-8 flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+<div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+<div>
+<h2 class="text-sm font-bold text-slate-900">Objectif voté confronté à la prévision du modèle</h2>
+<p class="text-xs text-slate-500 mt-0.5">Cibles adoptées vs projection mensuelle du modèle prédictif (régression + saisonnalité)</p>
+</div>
+<span class="text-xs font-mono text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md">Prévision</span>
+</div>
+<div class="overflow-x-auto w-full">
+<table class="w-full text-left font-pjs text-xs">
+<thead>
+<tr class="bg-slate-50 text-slate-500 font-mono text-[11px] border-b border-slate-200">
+<th class="py-3 px-4 font-semibold" scope="col">Compte</th>
+<th class="py-3 px-4 font-semibold text-right" scope="col">Mois</th>
+<th class="py-3 px-4 font-semibold text-right" scope="col">Objectif voté</th>
+<th class="py-3 px-4 font-semibold text-right" scope="col">Prévision du modèle</th>
+<th class="py-3 px-4 font-semibold text-center" scope="col">Écart</th>
+
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100" id="confrontationBody">{% for c in confrontation %}<tr class="hover:bg-slate-50/70 transition-colors" data-status=""><td class="py-3.5 px-4"><div class="flex flex-col"><span class="font-semibold text-slate-900">{{ c.categorie }}</span><span class="text-[11px] text-slate-400 font-mono">Projection statistique</span></div></td><td class="py-3.5 px-4 text-right font-mono text-slate-700">{{ c.mois|mois_fr }}</td><td class="py-3.5 px-4 text-right font-mono text-slate-700">{{ c.objectif|ariary }}</td><td class="py-3.5 px-4 text-right font-mono text-slate-700">{{ c.prevision|ariary }}</td><td class="py-3.5 px-4 text-right font-mono text-slate-700">{{ c.ecart_pct|pourcent_signe }}</td></tr>{% empty %}<tr><td class="py-6 text-center text-slate-400 text-sm" colspan="5">Pas assez d'historique pour prévoir.</td></tr>{% endfor %}</tbody>
+
+</table>
+</div>
+</div></div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+ var s=document.getElementById('tableSearchInput');
+ if(s){ s.addEventListener('input',function(e){
+ var q=e.target.value.toLowerCase;
+ document.querySelectorAll('#objectivesTableBody tr').forEach(function(r){ r.style.display = r.innerText.toLowerCase.indexOf(q)>-1 ? '' : 'none'; });
+ }); }
+</script>
+{% endblock %}

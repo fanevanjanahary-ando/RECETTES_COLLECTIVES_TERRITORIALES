@@ -36,6 +36,10 @@ Sur une base vide, créez l'administrateur avec `python manage.py createsuperuse
 
 Pour un déploiement sur un hébergeur, configurez la base de données, le stockage persistant des médias, les paramètres SMTP et les tâches périodiques selon les services proposés par la plateforme. Créez le compte administrateur avec `python manage.py createsuperuser`. Les secrets doivent être définis dans l'environnement d'exécution et ne jamais être inscrits dans le dépôt.
 
+### Configuration Gmail en local
+
+Copiez `.env.example` vers `.env`, puis remplacez `EMAIL_HOST_PASSWORD` par un mot de passe d'application Google. Activez la validation en deux étapes du compte Google pour pouvoir en générer un. Le fichier `.env` est ignoré par Git ; ne partagez pas son contenu et ne versionnez jamais le mot de passe. Les variables déjà définies dans l'environnement d'exécution restent prioritaires.
+
 ## Tests
 `python manage.py test recettes`
 

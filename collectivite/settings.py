@@ -3,8 +3,10 @@ import sys
 from pathlib import Path
 from django.core.exceptions import ImproperlyConfigured
 import dj_database_url
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / '.env')
 
 
 def _env_bool(nom, defaut):

@@ -187,7 +187,7 @@ def _styles_pdf():
     ))
     styles.add(ParagraphStyle(
         name="PdfHeading", parent=styles["Heading2"], fontName="Helvetica-Bold",
-        fontSize=11, leading=14, textColor=colors.HexColor("#047857"),
+        fontSize=11, leading=14, textColor=colors.HexColor("#25272C"),
         spaceBefore=7, spaceAfter=7,
     ))
     styles.add(ParagraphStyle(
@@ -576,7 +576,7 @@ def _style_tableau():
             ("RIGHTPADDING", (0, 0), (-1, -1), 5),
             ("TOPPADDING", (0, 0), (-1, -1), 5),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-            ("LINEBELOW", (0, 0), (-1, 0), 0.8, colors.HexColor("#10B981")),
+            ("LINEBELOW", (0, 0), (-1, 0), 0.8, colors.HexColor("#25272C")),
             ("GRID", (0, 1), (-1, -1), 0.25, colors.HexColor("#CBD5E1")),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),

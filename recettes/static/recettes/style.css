@@ -11,14 +11,14 @@
     --graphite-100: #f1f5f9;
     --graphite-50: #f8fafc;
 
-    --mint-100: #e1fbf2;
-    --mint-200: #c6f7e5;
-    --mint-300: #b8f7e4;
-    --mint-400: #6ee7b7;
-    --mint-500: #10b981;
-    --mint-600: #059669;
-    --mint-700: #047857;
-    --mint-900: #064e3b;
+    --mint-100: #f8fafc;
+    --mint-200: #f1f5f9;
+    --mint-300: #e2e8f0;
+    --mint-400: #cbd5e1;
+    --mint-500: #9ca3af;
+    --mint-600: #4b5563;
+    --mint-700: #25272c;
+    --mint-900: #131417;
 
     --coral-50: #fef2f2;
     --coral-100: #fee2e2;
@@ -36,13 +36,13 @@
     --border: var(--graphite-200);
 
     --bs-primary: var(--mint-600);
-    --bs-primary-rgb: 5, 150, 105;
+    --bs-primary-rgb: 75, 80, 90;
     --bs-secondary: var(--graphite-700);
     --bs-secondary-rgb: 75, 80, 90;
     --bs-success: var(--mint-600);
-    --bs-success-rgb: 5, 150, 105;
-    --bs-info: var(--mint-500);
-    --bs-info-rgb: 16, 185, 129;
+    --bs-success-rgb: 75, 80, 90;
+    --bs-info: var(--graphite-600);
+    --bs-info-rgb: 107, 114, 128;
     --bs-warning: var(--amber-500);
     --bs-warning-rgb: 217, 119, 6;
     --bs-danger: var(--coral-600);
@@ -366,7 +366,7 @@ table thead th {
 
 a.kpi-card:hover {
     border-color: var(--mint-500);
-    box-shadow: 0 2px 8px rgba(5, 150, 105, 0.12);
+    box-shadow: 0 2px 8px rgba(19, 20, 23, 0.1);
     color: inherit;
 }
 

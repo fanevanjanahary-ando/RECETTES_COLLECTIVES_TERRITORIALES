@@ -868,7 +868,7 @@ def comparaison(request):
         groupes = [{"label": c["chapitre"], "valeurs": [float(c["totaux"][a]) for a in donnees["annees"]]}
                    for c in donnees["lignes_chapitres"]]
         total_proj = float(donnees["projection_totale"] or 0) or 1
-        couleurs = ["#25272C", "#0D9488", "#5EEAD4", "#CBD5E1", "#94A3B8", "#64748B"]
+        couleurs = ["#25272C", "#737373", "#A3A3A3", "#CBD5E1", "#4B5563", "#64748B"]
         parts, legende = [], []
         for i, c in enumerate(donnees["lignes_chapitres"]):
             p = float(c["projection"]) / total_proj * 100

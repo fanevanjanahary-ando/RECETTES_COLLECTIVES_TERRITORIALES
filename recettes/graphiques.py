@@ -3,7 +3,7 @@ from django.utils.safestring import mark_safe
 
 from .formats import nombre
 
-COULEURS_ANNEES = ["#CBD5E1", "#25272C", "#5EEAD4", "#0D9488", "#94A3B8"]
+COULEURS_ANNEES = ["#CBD5E1", "#25272C", "#737373", "#A3A3A3", "#4B5563"]
 
 
 def _echelle(valeurs, y_bas, y_haut):
@@ -49,11 +49,11 @@ def svg_trajectoire(serie: dict, max_hist: int = 12):
         '<line stroke="#F1F5F9" stroke-width="1" x1="20" x2="480" y1="30" y2="30"></line>'
         '<line stroke="#F1F5F9" stroke-width="1" x1="20" x2="480" y1="80" y2="80"></line>'
         '<line stroke="#F1F5F9" stroke-width="1" x1="20" x2="480" y1="130" y2="130"></line>'
-        f'<polygon fill="#B8F7E4" fill-opacity="0.35" points="{cone}"></polygon>'
+        f'<polygon fill="#E2E8F0" fill-opacity="0.55" points="{cone}"></polygon>'
         f'<path d="{d_hist}" fill="none" stroke="#1E2024" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>'
-        f'<path d="{d_prev}" fill="none" stroke="#10B981" stroke-dasharray="4 4" stroke-linecap="round" stroke-width="2"></path>'
+        f'<path d="{d_prev}" fill="none" stroke="#6B7280" stroke-dasharray="4 4" stroke-linecap="round" stroke-width="2"></path>'
         f'<circle cx="{xc}" cy="{pp[0][1]:.0f}" fill="#1E2024" r="3.5"></circle>'
-        f'<circle cx="{fin[0]:.0f}" cy="{fin[1]:.0f}" fill="#B8F7E4" r="4" stroke="#10B981" stroke-width="2"></circle>'
+        f'<circle cx="{fin[0]:.0f}" cy="{fin[1]:.0f}" fill="#FFFFFF" r="4" stroke="#25272C" stroke-width="2"></circle>'
         "</svg>"
     )
 
@@ -72,8 +72,8 @@ def svg_focus(historique: list, cible: float, prevus: list, ecart_pct: float | N
     reb = [dernier] + [(430 + i * 50, y(v)) for i, v in enumerate(prevus[:2])]
     d_reb = "M " + " L ".join(f"{px:.0f},{py:.0f}" for px, py in reb)
     signe = f"{ecart_pct:+.1f}".replace(".", ",") if ecart_pct is not None else ""
-    couleur = "#EF4444" if (ecart_pct or 0) < 0 else "#10B981"
-    texte_c = "#DC2626" if (ecart_pct or 0) < 0 else "#059669"
+    couleur = "#EF4444" if (ecart_pct or 0) < 0 else "#25272C"
+    texte_c = "#DC2626" if (ecart_pct or 0) < 0 else "#1E2024"
     fin = reb[-1]
     return mark_safe(
         '<svg class="w-full h-full" fill="none" preserveAspectRatio="none" viewBox="0 0 500 160">'
@@ -85,8 +85,8 @@ def svg_focus(historique: list, cible: float, prevus: list, ecart_pct: float | N
         f'<path d="{d_hist}" fill="none" stroke="#1E2024" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>'
         f'<circle cx="{dernier[0]:.0f}" cy="{dernier[1]:.0f}" fill="{couleur}" r="4"></circle>'
         f'<text class="text-[10px] font-mono font-bold" fill="{texte_c}" x="{min(dernier[0] + 5, 300):.0f}" y="{min(dernier[1] + 16, 152):.0f}">{_mega(hist[-1])} ({signe}%)</text>'
-        f'<path d="{d_reb}" fill="none" stroke="#10B981" stroke-dasharray="4 4" stroke-linecap="round" stroke-width="2"></path>'
-        f'<circle cx="{fin[0]:.0f}" cy="{fin[1]:.0f}" fill="#10B981" r="3.5"></circle>'
+        f'<path d="{d_reb}" fill="none" stroke="#6B7280" stroke-dasharray="4 4" stroke-linecap="round" stroke-width="2"></path>'
+        f'<circle cx="{fin[0]:.0f}" cy="{fin[1]:.0f}" fill="#25272C" r="3.5"></circle>'
         "</svg>"
     )
 
@@ -104,7 +104,7 @@ def svg_projection(realise: list, objectif: list, prevision: list):
     if len(pr) >= 2:
         haut = [(x, py - 7) for x, py in pr]
         bas = [(x, py + 7) for x, py in pr]
-        bande = f'<polygon class="fill-[#B8F7E4]/40" points="{_pts(haut + bas[::-1])}"></polygon>'
+        bande = f'<polygon fill="#E2E8F0" fill-opacity="0.55" points="{_pts(haut + bas[::-1])}"></polygon>'
     ligne_obj = f'<polyline points="{_pts(ob)}" stroke="#717886" stroke-dasharray="3 3" stroke-width="1.5"></polyline>' if len(ob) >= 2 else ""
     ligne_re = f'<polyline points="{_pts(re_)}" stroke="#1E2024" stroke-linecap="round" stroke-width="2"></polyline>' if len(re_) >= 2 else ""
     point = f'<circle class="fill-rose-500 stroke-white" cx="{re_[-1][0]:.0f}" cy="{re_[-1][1]:.0f}" r="4" stroke-width="2"></circle>' if re_ else ""
@@ -166,7 +166,7 @@ def svg_sparkline(valeurs: list):
     pts = [(i * pas, y(v)) for i, v in enumerate(valeurs)]
     d = "M" + " L".join(f"{x:.0f} {yy:.0f}" for x, yy in pts)
     return mark_safe(
-        '<svg class="w-full h-11 text-emerald-600" fill="none" preserveAspectRatio="none" viewBox="0 0 280 48">'
+        '<svg class="w-full h-11 text-slate-700" fill="none" preserveAspectRatio="none" viewBox="0 0 280 48">'
         f'<path d="{d}" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>'
         f'<circle cx="{pts[-1][0]:.0f}" cy="{pts[-1][1]:.0f}" fill="currentColor" r="3.5"></circle></svg>'
     )

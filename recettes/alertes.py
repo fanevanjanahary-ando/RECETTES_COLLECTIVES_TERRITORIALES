@@ -24,7 +24,8 @@ class Ecart:
 
     @property
     def significatif(self) -> bool:
-        return abs(self.ecart_pct) >= self.seuil_pct
+        mois_courant = timezone.localdate().replace(day=1)
+        return self.mois < mois_courant and abs(self.ecart_pct) >= self.seuil_pct
 
     @property
     def sens(self) -> str:
@@ -127,8 +128,12 @@ def calculer_ecarts(annee: int | None = None, secteur_id=None):
     return ecarts
 
 
-def alertes_significatives(annee: int | None = None):
-    return [e for e in calculer_ecarts(annee) if e.significatif]
+def alertes_significatives(annee: int | None = None, secteur_id=None):
+    mois_courant = timezone.localdate().replace(day=1)
+    return [
+        e for e in calculer_ecarts(annee, secteur_id)
+        if e.significatif and e.mois < mois_courant
+    ]
 
 
 def execution_budgetaire(annee: int | None = None, secteur_id=None):

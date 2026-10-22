@@ -2,7 +2,11 @@ import time
 
 from django.core.management.base import BaseCommand
 
-from recettes.notifications import notifier_ecarts_significatifs, notifier_echeances_recouvrement
+from recettes.notifications import (
+    notifier_anomalies_en_attente,
+    notifier_ecarts_significatifs,
+    notifier_echeances_recouvrement,
+)
 from recettes.prevision import historiser_previsions
 
 
@@ -17,9 +21,11 @@ class Command(BaseCommand):
         while True:
             ecarts = notifier_ecarts_significatifs()
             echeances = notifier_echeances_recouvrement()
+            anomalies = notifier_anomalies_en_attente()
             previsions = historiser_previsions()
             self.stdout.write(
-                f"{ecarts} alerte(s), {echeances} rappel(s), {previsions} prévision(s) historisée(s)."
+                f"{ecarts} alerte(s), {echeances} rappel(s), {anomalies} notification(s) d'anomalie, "
+                f"{previsions} prévision(s) historisée(s)."
             )
             if options["une_fois"]:
                 return

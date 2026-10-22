@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.contrib.auth.models import User
 
 from .models import (
     Anomalie,
@@ -15,6 +17,15 @@ from .models import (
     Recette,
     Secteur,
 )
+
+
+admin.site.unregister(User)
+
+
+@admin.register(User)
+class UtilisateurAdmin(DjangoUserAdmin):
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Profil)

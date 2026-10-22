@@ -1,5 +1,5 @@
 """Formats d'affichage en Ariary (Ar) — utilisés par les gabarits, les PDF, les CSV et les e-mails."""
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 NBSP = "\u202f"
 
@@ -9,7 +9,7 @@ def nombre(valeur, decimales: int = 0) -> str:
         return "—"
     try:
         v = Decimal(str(valeur))
-    except Exception:
+    except (InvalidOperation, TypeError, ValueError):
         return str(valeur)
     texte = f"{abs(v):,.{decimales}f}".replace(",", NBSP).replace(".", ",")
     return ("-" if v < 0 and float(abs(v)) >= 0.5 * 10 ** (-decimales) else "") + texte

@@ -13,16 +13,20 @@ les messages s'affichent dans le terminal) :
 """
 from django.core.management.base import BaseCommand
 
-from recettes.notifications import notifier_ecarts_significatifs, notifier_echeances_recouvrement
+from recettes.notifications import (
+    notifier_anomalies_en_attente,
+    notifier_ecarts_significatifs,
+    notifier_echeances_recouvrement,
+)
 
 
 class Command(BaseCommand):
-    help = "Envoie les alertes d'écart budgétaire et les rappels d'échéance de recouvrement."
+    help = "Envoie les alertes, rappels d'échéance et notifications d'anomalie en attente."
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--type",
-            choices=["tout", "ecarts", "echeances"],
+            choices=["tout", "ecarts", "echeances", "anomalies"],
             default="tout",
             help="Limiter l'envoi à un seul type de notification.",
         )
@@ -37,5 +41,9 @@ class Command(BaseCommand):
             nb = notifier_echeances_recouvrement()
             total += nb
             self.stdout.write(self.style.SUCCESS(f"{nb} rappel(s) d'échéance de recouvrement envoyé(s)."))
+        if options["type"] in ("tout", "anomalies"):
+            nb = notifier_anomalies_en_attente()
+            total += nb
+            self.stdout.write(self.style.SUCCESS(f"{nb} notification(s) d'anomalie créée(s) ou relancée(s)."))
         if total == 0:
             self.stdout.write("Rien à envoyer : aucune nouvelle alerte (ou déjà notifiées).")

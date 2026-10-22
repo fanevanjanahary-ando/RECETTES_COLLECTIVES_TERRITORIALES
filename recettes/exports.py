@@ -95,7 +95,10 @@ def export_previsions_csv(annee=None, secteur_id=None) -> HttpResponse:
             lignes.append([mois, serie["label"], _nombre(valeur), _nombre(bas), _nombre(haut)])
     return _reponse_csv(
         "previsions.csv",
-        ["Mois", "Catégorie", "Prévision statistique (Ar)", "Borne basse 95 % (Ar)", "Borne haute 95 % (Ar)"],
+        [
+            "Mois", "Catégorie", "Prévision statistique (Ar)",
+            "Borne basse de prédiction à 95 % (Ar)", "Borne haute de prédiction à 95 % (Ar)",
+        ],
         lignes,
     )
 

@@ -7,8 +7,10 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.db.models import Sum
 from django.utils.crypto import get_random_string
+from django.utils import timezone
 
 from .models import (
     Anomalie,
@@ -156,6 +158,12 @@ class RecetteForm(FormulaireAvecUtilisateur):
             raise forms.ValidationError("Une recette perçue ne peut pas être négative.")
         return montant
 
+    def clean_date_imputation(self):
+        date_imputation = self.cleaned_data["date_imputation"]
+        if date_imputation > timezone.localdate():
+            raise forms.ValidationError("La date d'imputation ne peut pas être dans le futur.")
+        return date_imputation
+
     def clean(self):
         donnees = super().clean()
         categorie, secteur = donnees.get("categorie"), donnees.get("secteur")
@@ -193,7 +201,7 @@ class AnomalieForm(FormulaireAvecUtilisateur):
     assigne_a = UtilisateurChoix(queryset=User.objects.none(), required=False, label="Régisseur ou service assigné")
     montant = MontantField(max_digits=12, decimal_places=2, min_value=Decimal("0"), label="Montant contesté ou non apuré (Ar)")
     date_constat = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}), label="Date de constatation")
-    date_echeance = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}), label="Échéance légale de reversement")
+    date_echeance = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}), label="Échéance de reversement")
     motif = forms.ChoiceField(choices=Anomalie.Motif.choices, widget=forms.RadioSelect, label="Motif principal constaté")
 
     class Meta:
@@ -238,7 +246,9 @@ class CategorieForm(forms.ModelForm):
 class SecteurForm(forms.ModelForm):
     regisseur = UtilisateurChoix(queryset=User.objects.none(), required=False, label="Régisseur titulaire")
     suppleant = UtilisateurChoix(queryset=User.objects.none(), required=False, label="Mandataire suppléant")
-    plafond_encaissement = MontantField(max_digits=12, decimal_places=2, min_value=Decimal("0"), label="Plafond légal (Ar)")
+    plafond_encaissement = MontantField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0"), label="Plafond configuré (Ar)"
+    )
 
     class Meta:
         model = Secteur
@@ -416,9 +426,11 @@ class UtilisateurAdminForm(forms.ModelForm):
 
     def clean_email(self):
         email = self.cleaned_data["email"].strip().lower()
-        doublon = User.objects.filter(email__iexact=email).exclude(pk=self.instance.pk)
+        doublon = User.objects.filter(
+            Q(email__iexact=email) | Q(username__iexact=email)
+        ).exclude(pk=self.instance.pk)
         if doublon.exists():
-            raise forms.ValidationError("Un autre compte utilise déjà cette adresse e-mail.")
+            raise forms.ValidationError("Cette adresse est déjà utilisée comme courriel ou identifiant.")
         return email
 
     def save(self, commit=True):

@@ -178,7 +178,7 @@
 <span class="material-symbols-outlined text-[17px]">edit</span>
 </button><span class="inline-flex items-center gap-1"><form method="post" action="{% url 'cle_utilisateur' u.pk %}" class="m-0">{% csrf_token %}<button type="submit" class="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors" title="Envoyer un lien de réinitialisation du mot de passe">
 <span class="material-symbols-outlined text-[17px]">key</span>
-</button></form>{% if u != request.user %}<form method="post" action="{% url 'basculer_utilisateur' u.pk %}" class="m-0">{% csrf_token %}<button type="submit" class="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors" title="{% if u.is_active %}Désactiver{% else %}Réactiver{% endif %} le compte">
+</button></form>{% if u != request.user %}<form method="post" action="{% url 'basculer_utilisateur' u.pk %}" class="m-0" onsubmit="return confirm('{% if u.is_active %}Désactiver{% else %}Réactiver{% endif %} ce compte ?')">{% csrf_token %}<button type="submit" class="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors" title="{% if u.is_active %}Désactiver{% else %}Réactiver{% endif %} le compte">
 <span class="material-symbols-outlined text-[17px]">power_settings_new</span>
 </button></form>{% endif %}</span>{% endif %}</div></td>
 </tr>{% endfor %}
@@ -210,7 +210,7 @@
 <div class="space-y-1">
 <h3 class="text-sm font-bold text-slate-900">Règle déontologique : séparation des rôles et des accès</h3>
 <p class="text-xs text-slate-600 leading-relaxed max-w-4xl">
- Dans le respect des finances publiques et de la nomenclature des recettes, l'agent qui prescrit et ordonne la recette ne peut en aucun cas être celui qui encaisse ou comptabilise les fonds définitifs sans mandat préalable. L'application garantit cette étanchéité par profil pour protéger la collectivité et ses agents de toute gestion de fait.
+ Les rôles définissent les fonctions disponibles dans l'application. Ils ne remplacent pas les règles de séparation des tâches et délégations en vigueur dans la collectivité.
  </p>
 </div>
 </div>
@@ -312,7 +312,7 @@
 
 </div>
 </div>
-<div id="arbitrage-box" class="hidden rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><p class="font-semibold mb-1">Demande d'habilitation <span id="arb-ref"></span> en attente</p><p class="mb-2">Validez pour activer le compte, ou refusez pour supprimer la demande.</p><div class="flex gap-2"><button type="submit" form="arb-form" name="decision" value="valider" class="px-3 py-1.5 rounded-md bg-emerald-600 text-white font-medium">Valider l'habilitation</button><button type="submit" form="arb-form" name="decision" value="refuser" class="px-3 py-1.5 rounded-md bg-white border border-red-200 text-red-700 font-medium">Refuser</button></div></div></form>
+<div id="arbitrage-box" class="hidden rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><p class="font-semibold mb-1">Demande d'habilitation <span id="arb-ref"></span> en attente</p><p class="mb-2">Choisissez explicitement une décision. Un refus désactive le compte sans supprimer son dossier.</p><div class="flex gap-2"><button type="submit" form="arb-form" name="decision" value="valider" class="px-3 py-1.5 rounded-md bg-emerald-600 text-white font-medium">Valider l'habilitation</button><button type="submit" form="arb-form" name="decision" value="refuser" onclick="return confirm('Refuser la demande et désactiver le compte ? Le dossier sera conservé.')" class="px-3 py-1.5 rounded-md bg-white border border-red-200 text-red-700 font-medium">Refuser et désactiver</button></div></div></form>
 </div>
 
 <div class="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2.5">

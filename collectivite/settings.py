@@ -92,6 +92,9 @@ DATABASES = {
 
 PASSWORD_RESET_TIMEOUT = 3 * 24 * 60 * 60
 
+if 'test' in sys.argv:
+    PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -132,14 +135,24 @@ MEDIA_ROOT = Path(os.environ.get('DJANGO_MEDIA_ROOT', BASE_DIR / 'media'))
 DATA_UPLOAD_MAX_MEMORY_SIZE = 12 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 
-EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND')
-if os.environ.get('EMAIL_HOST'):
-    EMAIL_BACKEND = EMAIL_BACKEND or 'django.core.mail.backends.smtp.EmailBackend'
-    EMAIL_HOST = os.environ['EMAIL_HOST']
+EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
+try:
     EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
-    EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
-    EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
-    EMAIL_USE_TLS = _env_bool('EMAIL_USE_TLS', True)
+    EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', 10))
+except ValueError as erreur:
+    raise ImproperlyConfigured('EMAIL_PORT et EMAIL_TIMEOUT doivent être des nombres entiers.') from erreur
+if not 1 <= EMAIL_PORT <= 65535 or EMAIL_TIMEOUT <= 0:
+    raise ImproperlyConfigured('EMAIL_PORT doit être entre 1 et 65535 et EMAIL_TIMEOUT doit être positif.')
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = _env_bool('EMAIL_USE_TLS', bool(EMAIL_HOST))
+EMAIL_USE_SSL = _env_bool('EMAIL_USE_SSL', False)
+if EMAIL_USE_TLS and EMAIL_USE_SSL:
+    raise ImproperlyConfigured('EMAIL_USE_TLS et EMAIL_USE_SSL ne peuvent pas être activés simultanément.')
+
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND')
+if EMAIL_HOST:
+    EMAIL_BACKEND = EMAIL_BACKEND or 'django.core.mail.backends.smtp.EmailBackend'
 elif not EMAIL_BACKEND and (DEBUG or 'test' in sys.argv):
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 elif not EMAIL_BACKEND:

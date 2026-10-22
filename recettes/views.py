@@ -64,6 +64,7 @@ from .models import (
 )
 from .notifications import (
     notifier_anomalie,
+    notifier_anomalies_en_attente,
     notifier_ecarts_significatifs,
     notifier_habilitation,
     notifier_relance,
@@ -245,8 +246,10 @@ def dashboard(request):
         precedent = Decimal("0")
     execution = execution_budgetaire(annee, secteur_id)
     ecarts = calculer_ecarts(annee, secteur_id)
-    alertes = [e for e in ecarts if e.significatif]
-    pire = alertes[0] if alertes else (ecarts[0] if ecarts else None)
+    mois_courant = timezone.localdate().replace(day=1)
+    ecarts_clos = [e for e in ecarts if e.mois < mois_courant]
+    alertes = [e for e in ecarts_clos if e.significatif]
+    pire = alertes[0] if alertes else (ecarts_clos[0] if ecarts_clos else None)
 
     suivi = recouvrement_par_secteur(annee=annee, secteur_id=secteur_id)
     for ligne in suivi["lignes"]:
@@ -447,7 +450,7 @@ def modifier_recette(request, pk):
             form.save()
             journaliser(
                 request, "recette_modification", recette.reference,
-                f"avant : {avant} ; apres : {recette.categorie} / {recette.secteur} / "
+                f"avant : {avant} ; après : {recette.categorie} / {recette.secteur} / "
                 f"{recette.mois:%m/%Y} / {recette.montant} Ar",
             )
             messages.success(request, "Recette modifiée.")
@@ -479,7 +482,12 @@ def bordereau(request, pk):
     recette = get_object_or_404(recettes_visibles(request.user), pk=pk)
     if not recette.piece_jointe:
         raise Http404("Aucune pièce jointe.")
-    return FileResponse(recette.piece_jointe.open("rb"), as_attachment=False, filename=recette.piece_jointe.name.split("/")[-1])
+    try:
+        fichier = recette.piece_jointe.open("rb")
+    except OSError as erreur:
+        logger.exception("Pièce justificative introuvable pour la recette %s", recette.pk)
+        raise Http404("La pièce justificative n'est plus disponible.") from erreur
+    return FileResponse(fichier, as_attachment=False, filename=recette.piece_jointe.name.split("/")[-1])
 
 
 def _total_par_categorie(annee):
@@ -1011,7 +1019,7 @@ def signaler_anomalie(request, pk=None):
         {
             "form": form,
             "anomalie": anomalie,
-            "nb_en_cours": Anomalie.objects.filter(traitee=False, brouillon=False).count(),
+            "nb_en_cours": anomalies_visibles(request.user).filter(traitee=False, brouillon=False).count(),
             "prochaine_ref": anomalie.reference if anomalie else f"ANO-{timezone.localdate().year}-{(Anomalie.objects.order_by('-pk').values_list('pk', flat=True).first() or 0) + 1:03d}",
         },
     )
@@ -1039,7 +1047,10 @@ def relancer_anomalie(request, pk):
     elif notifier_relance(anomalie, request.user):
         EchangeAnomalie.objects.create(anomalie=anomalie, auteur=request.user, titre="Relance du régisseur",
                                        texte=f"Relance adressée à {anomalie.assigne_a.get_full_name() or anomalie.assigne_a.username}.")
-        messages.success(request, "Relance envoyée.")
+        messages.success(
+            request,
+            "Relance enregistrée dans l'application ; l'e-mail suit les préférences du destinataire.",
+        )
     else:
         messages.info(request, "Ce régisseur a déjà été relancé aujourd'hui sur ce dossier.")
     return redirect(f"{reverse('liste_anomalies')}?dossier={pk}")
@@ -1063,7 +1074,12 @@ def piece_anomalie(request, pk):
     anomalie = get_object_or_404(anomalies_visibles(request.user), pk=pk)
     if not anomalie.piece_jointe:
         raise Http404("Aucune pièce jointe.")
-    return FileResponse(anomalie.piece_jointe.open("rb"), filename=anomalie.piece_jointe.name.split("/")[-1])
+    try:
+        fichier = anomalie.piece_jointe.open("rb")
+    except OSError as erreur:
+        logger.exception("Pièce justificative introuvable pour l'anomalie %s", anomalie.pk)
+        raise Http404("La pièce justificative n'est plus disponible.") from erreur
+    return FileResponse(fichier, filename=anomalie.piece_jointe.name.split("/")[-1])
 
 
 @login_required
@@ -1131,10 +1147,10 @@ def traiter_notification(request, pk):
 @role_requis(Profil.Role.ADMIN, Profil.Role.RESPONSABLE)
 @require_POST
 def declencher_notifications(request):
-    nb = notifier_ecarts_significatifs()
+    nb = notifier_ecarts_significatifs() + notifier_anomalies_en_attente()
     messages.success(
         request,
-        f"{nb} notification(s) envoyée(s)."
+        f"{nb} notification(s) créée(s) ou relancée(s)."
         if nb else "Vérification terminée : aucune nouvelle alerte à notifier.",
     )
     return redirect(_page_suivante(request, "liste_notifications"))
@@ -1262,30 +1278,48 @@ def arbitrer_utilisateur(request, pk):
     if not profil.en_attente or utilisateur == request.user:
         messages.error(request, "Cette demande n'est pas en attente d'arbitrage.")
         return redirect("liste_utilisateurs")
+    decision = request.POST.get("decision")
+    if decision not in {"valider", "refuser"}:
+        messages.error(request, "Choisissez explicitement de valider ou de refuser cette demande.")
+        return redirect("liste_utilisateurs")
     journaliser(
         request,
-        "habilitation_" + ("validation" if request.POST.get("decision") == "valider" else "refus"),
+        "habilitation_" + ("validation" if decision == "valider" else "refus"),
         utilisateur.username,
     )
-    if request.POST.get("decision") == "valider":
+    if decision == "valider":
         utilisateur.is_active = True
         utilisateur.save(update_fields=["is_active"])
         profil.en_attente = False
         profil.save(update_fields=["en_attente"])
+        email_envoye = True
         if utilisateur.email:
             from django.core.mail import send_mail
 
-            send_mail(
-                "[Recettes collectivité] Habilitation validée",
-                f"Bonjour {profil.nom_affiche},\n\nVotre demande {profil.reference_demande} a été validée. "
-                "Vous pouvez désormais vous connecter avec votre adresse e-mail et votre mot de passe.",
-                settings.DEFAULT_FROM_EMAIL, [utilisateur.email], fail_silently=True,
+            try:
+                email_envoye = bool(send_mail(
+                    "[Recettes collectivité] Habilitation validée",
+                    f"Bonjour {profil.nom_affiche},\n\nVotre demande {profil.reference_demande} a été validée. "
+                    "Vous pouvez désormais vous connecter avec votre adresse e-mail et votre mot de passe.",
+                    settings.DEFAULT_FROM_EMAIL, [utilisateur.email], fail_silently=False,
+                ))
+            except (OSError, smtplib.SMTPException):
+                logger.exception("Échec de l'envoi de l'e-mail de validation à %s", utilisateur.email)
+                email_envoye = False
+        if email_envoye:
+            messages.success(request, f"Habilitation validée pour {profil.nom_affiche}.")
+        else:
+            messages.warning(
+                request,
+                f"Habilitation validée pour {profil.nom_affiche}, mais l'e-mail n'a pas pu être envoyé.",
             )
-        messages.success(request, f"Habilitation validée pour {profil.nom_affiche}.")
     else:
         nom = profil.nom_affiche
-        utilisateur.delete()
-        messages.success(request, f"Demande de {nom} refusée et supprimée.")
+        utilisateur.is_active = False
+        utilisateur.save(update_fields=["is_active"])
+        profil.en_attente = False
+        profil.save(update_fields=["en_attente"])
+        messages.success(request, f"Demande de {nom} refusée. Le compte a été désactivé et conservé.")
     return redirect("liste_utilisateurs")
 
 
@@ -1423,7 +1457,8 @@ def _envoyer_rapport(utilisateur, rapport, contenu, mime, extension):
     message.attach(f"{rapport.reference}.{extension}", contenu, mime)
     try:
         return bool(message.send(fail_silently=False))
-    except Exception:
+    except (OSError, smtplib.SMTPException):
+        logger.exception("Échec de l'envoi du rapport %s à %s", rapport.pk, utilisateur.email)
         return False
 
 
@@ -1437,8 +1472,12 @@ def telecharger_rapport(request, pk):
             "csv": "text/csv; charset=utf-8",
             "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         }
-        with rapport.fichier.open("rb") as fichier:
-            contenu = fichier.read()
+        try:
+            with rapport.fichier.open("rb") as fichier:
+                contenu = fichier.read()
+        except OSError as erreur:
+            logger.exception("Fichier du rapport %s introuvable", rapport.pk)
+            raise Http404("Le fichier du rapport n'est plus disponible.") from erreur
         mime = mimes.get(extension, "application/octet-stream")
     else:
         annee = (

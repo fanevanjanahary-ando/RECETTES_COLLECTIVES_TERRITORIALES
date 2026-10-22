@@ -120,9 +120,13 @@ def api_referentiels(request):
 
     impose = secteur_impose(request.user)
     secteurs = Secteur.objects.filter(actif=True, pk=impose) if impose is not None else Secteur.objects.filter(actif=True)
+    categories = Categorie.objects.filter(actif=True)
+    profil = getattr(request.user, "profil", None)
+    if profil and profil.role == Profil.Role.AGENT:
+        categories = categories.filter(ouverte_aux_agents=True)
     return JsonResponse({
         "exercices": annees_disponibles(),
         "secteurs": [{"id": s.pk, "nom": s.nom, "code": s.code} for s in secteurs],
         "categories": [{"id": c.pk, "nom": c.nom, "code": c.code, "chapitre": c.chapitre}
-                       for c in Categorie.objects.filter(actif=True)],
+                       for c in categories],
     })

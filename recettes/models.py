@@ -201,8 +201,8 @@ class Secteur(models.Model):
 
     class Frequence(models.IntegerChoices):
         SEPT = 7, "Hebdomadaire (J+7)"
-        DIX = 10, "Décadaire (J+10)"
-        QUINZE = 15, "Bi-mensuelle (J+15)"
+        DIX = 10, "Tous les 10 jours (J+10)"
+        QUINZE = 15, "Tous les 15 jours (J+15)"
         TRENTE = 30, "Mensuelle (J+30)"
 
     nom = models.CharField(max_length=100, unique=True)
@@ -220,7 +220,7 @@ class Secteur(models.Model):
     )
     iban = models.CharField("Compte de dépôt (IBAN / RIB)", max_length=40, blank=True)
     plafond_encaissement = models.DecimalField(
-        "Plafond légal d'encaissement (Ar)", max_digits=12, decimal_places=2, default=Decimal("50000000"),
+        "Plafond d'encaissement configuré (Ar)", max_digits=12, decimal_places=2, default=Decimal("50000000"),
         validators=[MinValueValidator(Decimal("0.00"))],
     )
     frequence_versement = models.PositiveSmallIntegerField(
@@ -357,6 +357,8 @@ class Recette(models.Model):
         if self.montant is not None and self.montant < 0:
             raise ValidationError({"montant": "Une recette perçue ne peut pas être négative."})
         if self.date_imputation:
+            if self.date_imputation > timezone.localdate():
+                raise ValidationError({"date_imputation": "La date d'imputation ne peut pas être dans le futur."})
             self.mois = self.date_imputation.replace(day=1)
         elif self.mois and self.mois.day != 1:
             self.mois = self.mois.replace(day=1)
@@ -442,7 +444,7 @@ class Anomalie(models.Model):
         validators=[MinValueValidator(Decimal("0.00"))],
     )
     date_constat = models.DateField("Date de constatation", null=True, blank=True)
-    date_echeance = models.DateField("Échéance légale de reversement", null=True, blank=True)
+    date_echeance = models.DateField("Échéance de reversement", null=True, blank=True)
     assigne_a = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         related_name="anomalies_assignees", verbose_name="Régisseur ou agent assigné",

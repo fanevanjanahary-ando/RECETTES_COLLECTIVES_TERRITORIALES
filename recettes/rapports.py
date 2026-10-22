@@ -35,10 +35,14 @@ def _libelle_mois(d):
     return f"{MOIS_NOMS[d.month - 1].capitalize()} {d.year}"
 
 def texte_sur(valeur):
-    if isinstance(valeur, str) and valeur[:1] in ("=", "+", "-", "@", "\t", "\r"):
-        if re.fullmatch(r"[+-]?[\d\s,.]+%?", valeur):
-            return valeur
-        return "'" + valeur
+    if isinstance(valeur, str):
+        debute = valeur.lstrip(" \t\r\n\ufeff")
+        prefixe_dangereux = debute[:1] in ("=", "+", "-", "@")
+        controle_initial = valeur[:1] in ("\t", "\r", "\n")
+        if prefixe_dangereux or controle_initial:
+            if debute[:1] in ("+", "-") and re.fullmatch(r"[+-]?[\d\s,.]+%?", debute):
+                return valeur
+            return "'" + valeur
     return valeur
 
 def comparaison_exercices(annees: int = 3, annee_reference: int | None = None) -> dict:
@@ -362,7 +366,7 @@ def _section_synthese(elements, styles, annee, parametres):
         "(tendance linéaire, saisonnalité, facteurs économiques)", styles["PdfHeading"],
     ))
     elements.append(Paragraph(
-        "Ces montants sont calculés à partir de l'historique, avec un intervalle de confiance à 95 %. "
+        "Les bornes forment un intervalle de prédiction à 95 %, calculé avec la distribution de Student. "
         "Ils ne doivent pas être confondus avec les objectifs budgétaires votés.", styles["PdfNote"],
     ))
     elements.append(Spacer(1, 0.3 * cm))
@@ -370,7 +374,9 @@ def _section_synthese(elements, styles, annee, parametres):
     for message in avertissements_modele(previsions):
         elements.append(Paragraph(escape(message), styles["PdfNote"]))
     elements.append(Spacer(1, 0.3 * cm))
-    donnees = [["Catégorie", "Mois", "Prévu (Ar)", "Borne basse (Ar)", "Borne haute (Ar)"]]
+    donnees = [
+        ["Catégorie", "Mois", "Prévu (Ar)", "Borne basse de prédiction (Ar)", "Borne haute de prédiction (Ar)"]
+    ]
     for serie in previsions.values():
         for mois, valeur, bas, haut in zip(
             serie["mois_prevus"], serie["montants_prevus"], serie["bornes_basses"], serie["bornes_hautes"]
@@ -490,7 +496,10 @@ def _feuilles_synthese(wb, ws, annee):
         ])
 
     feuille = wb.create_sheet("Prévisions")
-    feuille.append(["Catégorie", "Mois", "Prévu (Ar)", "Borne basse (Ar)", "Borne haute (Ar)"])
+    feuille.append([
+        "Catégorie", "Mois", "Prévu (Ar)",
+        "Borne basse de prédiction à 95 % (Ar)", "Borne haute de prédiction à 95 % (Ar)",
+    ])
     for serie in previsions_par_categorie().values():
         for mois, valeur, bas, haut in zip(
             serie["mois_prevus"], serie["montants_prevus"], serie["bornes_basses"], serie["bornes_hautes"]
@@ -527,6 +536,10 @@ def generer_rapport_xlsx(type_doc: str = "LIASSE", annee: int | None = None, moi
                 recette.get_mode_reglement_display(), float(recette.montant), texte_sur(recette.libelle),
             ])
     for feuille in wb.worksheets:
+        for ligne in feuille.iter_rows():
+            for cellule in ligne:
+                if isinstance(cellule.value, str):
+                    cellule.value = texte_sur(cellule.value)
         _styler_feuille(feuille)
     tampon = BytesIO()
     wb.save(tampon)

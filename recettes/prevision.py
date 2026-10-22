@@ -1,4 +1,3 @@
-from collections import defaultdict
 from datetime import date
 
 import numpy as np
@@ -7,8 +6,32 @@ from django.utils import timezone
 
 from .models import FacteurEconomique, ParametrageSysteme, PrevisionHistorisee, Recette
 
-VERSION_MODELE = "tendance-lineaire-saisonnalite-v2"
-Z_95 = 1.96
+VERSION_MODELE = "tendance-lineaire-saisonnalite-v3"
+_T_975 = (
+    0.0, 12.7062, 4.3027, 3.1824, 2.7764, 2.5706, 2.4469, 2.3646,
+    2.3060, 2.2622, 2.2281, 2.2010, 2.1788, 2.1604, 2.1448, 2.1314,
+    2.1199, 2.1098, 2.1009, 2.0930, 2.0860, 2.0796, 2.0739, 2.0687,
+    2.0639, 2.0595, 2.0555, 2.0518, 2.0484, 2.0452, 2.0423,
+)
+
+
+def _t_critique_95(degres_liberte: int) -> float:
+    if degres_liberte < 1:
+        raise ValueError("Les degrés de liberté doivent être strictement positifs.")
+    if degres_liberte < len(_T_975):
+        return _T_975[degres_liberte]
+
+    z = 1.959963984540054
+    v = float(degres_liberte)
+    z2 = z * z
+    return (
+        z
+        + (z * z2 + z) / (4 * v)
+        + (5 * z * z2**2 + 16 * z * z2 + 3 * z) / (96 * v**2)
+        + (3 * z * z2**3 + 19 * z * z2**2 + 17 * z * z2 - 15 * z) / (384 * v**3)
+        + (79 * z * z2**4 + 776 * z * z2**3 + 1482 * z * z2**2 - 1920 * z * z2 - 945 * z)
+        / (92160 * v**4)
+    )
 
 
 def _mois_suivant(d: date) -> date:
@@ -56,31 +79,38 @@ def _coefficient(facteurs, categorie_id, mois):
 
 def _modele(mois_historique, montants_historique, mois_a_prevoir, saisonnalite_minimum=24,
             facteurs=None, categorie_id=None):
-    x = np.array([_indice_mois(m) - _indice_mois(mois_historique[0]) for m in mois_historique], dtype=float)
     y = np.array(montants_historique, dtype=float)
     n = len(y)
-
-    if n >= 2 and np.ptp(x) > 0:
-        pente, ordonnee = np.polyfit(x, y, 1)
-    else:
-        pente, ordonnee = 0.0, float(y.mean())
-    tendance = pente * x + ordonnee
-    residus = y - tendance
-
+    mois_origine = _indice_mois(mois_historique[0])
+    x = np.array([_indice_mois(m) - mois_origine for m in mois_historique], dtype=float)
     etendue = int(x[-1] - x[0]) + 1
-    saisonnalite = etendue >= saisonnalite_minimum
-    indice = {}
-    if saisonnalite:
-        par_mois = defaultdict(list)
-        for m, r in zip(mois_historique, residus):
-            par_mois[m.month].append(float(r))
-        indice = {k: float(np.mean(v)) for k, v in par_mois.items()}
-        residus = residus - np.array([indice[m.month] for m in mois_historique])
+    mois_saisonniers = sorted({m.month for m in mois_historique})
+    saisonnalite = n >= saisonnalite_minimum and etendue >= saisonnalite_minimum and len(mois_saisonniers) > 1
 
-    ddl = max(n - 2, 1)
-    sigma = float(np.sqrt(np.sum(residus ** 2) / ddl)) if n > 2 else 0.0
-    xbar = float(x.mean())
-    sxx = float(np.sum((x - xbar) ** 2)) or 1.0
+    def matrice_design(mois, avec_saisonnalite):
+        offsets = np.array([_indice_mois(m) - mois_origine for m in mois], dtype=float)
+        colonnes = [np.ones(len(mois)), offsets]
+        if avec_saisonnalite:
+            colonnes.extend(
+                np.array([float(m.month == code) for m in mois])
+                for code in mois_saisonniers[1:]
+            )
+        return np.column_stack(colonnes)
+
+    matrice = matrice_design(mois_historique, saisonnalite)
+    rang = np.linalg.matrix_rank(matrice)
+    if rang < matrice.shape[1] or n <= matrice.shape[1]:
+        saisonnalite = False
+        matrice = matrice_design(mois_historique, False)
+        rang = np.linalg.matrix_rank(matrice)
+    if rang < matrice.shape[1] or n <= matrice.shape[1]:
+        raise ValueError("L'historique ne contient pas assez de points indépendants pour la prévision.")
+
+    coefficients, _, _, _ = np.linalg.lstsq(matrice, y, rcond=None)
+    residus = y - matrice @ coefficients
+    degres_liberte = n - matrice.shape[1]
+    sigma = float(np.sqrt(np.sum(residus ** 2) / degres_liberte))
+    inverse = np.linalg.pinv(matrice)
 
     mois_prevus, curseur = [], mois_historique[-1]
     for _ in range(mois_a_prevoir):
@@ -90,9 +120,10 @@ def _modele(mois_historique, montants_historique, mois_a_prevoir, saisonnalite_m
     facteurs = facteurs or []
     montants, bas, haut = [], [], []
     for m in mois_prevus:
-        x0 = _indice_mois(m) - _indice_mois(mois_historique[0])
-        base = pente * x0 + ordonnee + indice.get(m.month, 0.0)
-        marge = Z_95 * sigma * float(np.sqrt(1 + 1 / n + (x0 - xbar) ** 2 / sxx))
+        vecteur = matrice_design([m], saisonnalite)[0]
+        base = float(vecteur @ coefficients)
+        levier = float(np.sum((vecteur @ inverse) ** 2))
+        marge = _t_critique_95(degres_liberte) * sigma * float(np.sqrt(1 + levier))
         coef = _coefficient(facteurs, categorie_id, m)
         montants.append(round(float(max(0.0, base * coef)), 2))
         bas.append(round(float(max(0.0, (base - marge) * coef)), 2))
@@ -107,6 +138,7 @@ def previsions_par_categorie(mois_a_prevoir: int | None = None, historique_minim
         mois_a_prevoir = parametres.mois_a_prevoir
     if historique_minimum is None:
         historique_minimum = parametres.historique_minimum
+    historique_minimum = max(historique_minimum, 3)
     facteurs = _facteurs()
 
     resultats = {}
@@ -151,7 +183,7 @@ def avertissements_modele(previsions: dict | None = None) -> list:
 def fiabilite_modele(horizon_test: int = 3) -> float | None:
     erreurs = []
     parametres = ParametrageSysteme.charger()
-    minimum = max(parametres.historique_minimum, 2)
+    minimum = max(parametres.historique_minimum, 3)
     for cat_id, (_, points) in historique_mensuel_par_categorie().items():
         if len(points) < minimum + horizon_test:
             continue

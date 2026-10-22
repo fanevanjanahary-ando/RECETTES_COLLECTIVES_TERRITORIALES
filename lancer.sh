@@ -12,9 +12,16 @@ if [ ! -d "venv" ]; then
 fi
 
 source venv/bin/activate
+export DJANGO_DEBUG=1
 
 echo "→ Vérification des dépendances..."
 pip install -q -r requirements.txt
+
+if [ ! -f "recettes/static/recettes/vendor/tailwind-forms.css" ]; then
+    echo "→ Construction des ressources locales (Node requis)..."
+    npm install
+    npm run assets
+fi
 
 echo "→ Migrations..."
 python manage.py migrate
@@ -35,5 +42,9 @@ echo ""
 echo "=== Serveur lancé : ouvrez http://127.0.0.1:8000/ dans votre navigateur ==="
 echo "(Ctrl+C dans ce terminal pour arrêter le serveur)"
 echo ""
+
+python manage.py boucle_taches --intervalle 3600 > /dev/null 2>&1 &
+TACHES_PID=$!
+trap 'kill "$TACHES_PID" 2>/dev/null' EXIT
 
 python manage.py runserver

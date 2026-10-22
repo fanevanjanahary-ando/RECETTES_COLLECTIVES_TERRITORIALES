@@ -7,7 +7,8 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import User
-from django.core.management.base import BaseCommand
+from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from recettes.models import (
@@ -81,9 +82,12 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--mois", type=int, default=36, help="Nombre de mois d'historique à générer")
         parser.add_argument("--vider", action="store_true", help="Supprime les données existantes avant de générer")
+        parser.add_argument("--force", action="store_true", help="Autorise l'exécution quand DEBUG est désactivé")
 
     def handle(self, *args, **options):
         nb_mois = options["mois"]
+        if not settings.DEBUG and not options["force"]:
+            raise CommandError("Commande réservée au développement : ajoutez --force pour l'exécuter hors DEBUG.")
         if options["vider"]:
             for modele in (Recette, ObjectifBudgetaire, EchangeAnomalie, Anomalie, Notification, RapportGenere):
                 modele.objects.all().delete()

@@ -1,10 +1,11 @@
-from datetime import date
+
 from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 class Profil(models.Model):
 
@@ -83,6 +84,12 @@ class ParametrageSysteme(models.Model):
         verbose_name="Envoi réel des e-mails",
         help_text="Si décoché, les notifications restent visibles dans l'application mais aucun e-mail n'est envoyé.",
     )
+    saisonnalite_minimum_mois = models.PositiveSmallIntegerField(
+        default=24,
+        validators=[MinValueValidator(12), MaxValueValidator(60)],
+        verbose_name="Historique minimum pour la saisonnalité (mois)",
+        help_text="En dessous de ce nombre de mois, la prévision utilise la tendance seule, sans indice saisonnier.",
+    )
     date_modification = models.DateTimeField(auto_now=True)
     modifie_par = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
@@ -107,7 +114,79 @@ class ParametrageSysteme(models.Model):
     @property
     def seuil_alerte_ratio(self) -> float:
         return float(self.seuil_alerte_pct) / 100
+class FacteurEconomique(models.Model):
 
+    libelle = models.CharField(max_length=120, verbose_name="Facteur économique")
+    mois_debut = models.DateField(help_text="Premier jour du premier mois concerné")
+    mois_fin = models.DateField(help_text="Premier jour du dernier mois concerné")
+    categorie = models.ForeignKey(
+        "Categorie", on_delete=models.CASCADE, null=True, blank=True, related_name="facteurs",
+        help_text="Vide = toutes les catégories.",
+    )
+    effet_pct = models.DecimalField(
+        max_digits=6, decimal_places=2,
+        validators=[MinValueValidator(Decimal("-90.00")), MaxValueValidator(Decimal("500.00"))],
+        verbose_name="Effet attendu (%)",
+        help_text="Variation en pourcentage appliquée à la prévision des mois concernés (ex. : 3 pour une hausse de 3 %).",
+    )
+    cree_par = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    date_creation = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["mois_debut", "libelle"]
+        verbose_name = "Facteur économique"
+        verbose_name_plural = "Facteurs économiques"
+
+    def __str__(self):
+        return f"{self.libelle} ({self.effet_pct:+} %)"
+
+    def clean(self):
+        super().clean()
+        if self.mois_debut and self.mois_debut.day != 1:
+            self.mois_debut = self.mois_debut.replace(day=1)
+        if self.mois_fin and self.mois_fin.day != 1:
+            self.mois_fin = self.mois_fin.replace(day=1)
+        if self.mois_debut and self.mois_fin and self.mois_fin < self.mois_debut:
+            raise ValidationError({"mois_fin": "Le mois de fin ne peut pas précéder le mois de début."})
+
+
+class JournalAudit(models.Model):
+
+    utilisateur = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    action = models.CharField(max_length=40)
+    objet = models.CharField(max_length=120)
+    detail = models.TextField(blank=True)
+    adresse_ip = models.GenericIPAddressField(null=True, blank=True)
+    date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date"]
+        verbose_name = "Entrée du journal d'audit"
+        verbose_name_plural = "Journal d'audit"
+
+    def __str__(self):
+        return f"{self.date:%d/%m/%Y %H:%M} {self.action} {self.objet}"
+
+
+class PrevisionHistorisee(models.Model):
+
+    categorie = models.ForeignKey("Categorie", on_delete=models.CASCADE, related_name="previsions_historisees")
+    mois = models.DateField()
+    montant_prevu = models.DecimalField(max_digits=14, decimal_places=2)
+    borne_basse = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    borne_haute = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    date_calcul = models.DateField()
+    version = models.CharField(max_length=40, blank=True)
+
+    class Meta:
+        ordering = ["-date_calcul", "categorie", "mois"]
+        constraints = [
+            models.UniqueConstraint(fields=["categorie", "mois", "date_calcul"], name="unique_prevision_par_jour"),
+        ]
+
+    def __str__(self):
+        return f"Prévision {self.categorie} {self.mois:%m/%Y} calculée le {self.date_calcul:%d/%m/%Y}"
+    
 class Secteur(models.Model):
 
     class Frequence(models.IntegerChoices):
@@ -316,11 +395,11 @@ class ObjectifBudgetaire(models.Model):
         ordering = ["-mois", "categorie"]
         constraints = [
             models.UniqueConstraint(
-                fields=["categorie", "mois"], condition=models.Q(secteur__isnull=True),
+                fields=["categorie", "mois", "type_budget"], condition=models.Q(secteur__isnull=True),
                 name="unique_objectif_consolide",
             ),
             models.UniqueConstraint(
-                fields=["categorie", "mois", "secteur"], condition=models.Q(secteur__isnull=False),
+                fields=["categorie", "mois", "secteur", "type_budget"], condition=models.Q(secteur__isnull=False),
                 name="unique_objectif_secteur",
             ),
             models.CheckConstraint(condition=models.Q(montant_cible__gte=0), name="objectif_montant_positif"),
@@ -382,16 +461,16 @@ class Anomalie(models.Model):
 
     @property
     def reference(self):
-        annee = self.date_signalement.year if self.date_signalement else date.today().year
+        annee = self.date_signalement.year if self.date_signalement else timezone.localdate().year
         return f"ANO-{annee}-{self.pk:03d}" if self.pk else f"ANO-{annee}-NEW"
 
     @property
     def en_retard(self):
-        return bool(self.date_echeance and not self.traitee and self.date_echeance < date.today())
+        return bool(self.date_echeance and not self.traitee and self.date_echeance < timezone.localdate())
 
     @property
     def jours_retard(self):
-        return (date.today() - self.date_echeance).days if self.en_retard else 0
+        return (timezone.localdate() - self.date_echeance).days if self.en_retard else 0
 
     @property
     def statut(self):
@@ -475,6 +554,7 @@ class RapportGenere(models.Model):
     cree_par = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
     date_creation = models.DateTimeField(auto_now_add=True)
     taille = models.PositiveIntegerField(default=0)
+    fichier = models.FileField(upload_to="rapports/%Y/%m/", blank=True, null=True)
 
     class Meta:
         ordering = ["-date_creation"]

@@ -1,0 +1,32 @@
+{% extends "recettes/base.html" %}{% load formats %}
+{% block title %}Facteurs économiques{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto flex flex-col gap-6 pt-4">
+<div>
+<h1 class="text-2xl font-bold text-[#1E2024] tracking-tight">Facteurs économiques</h1>
+<p class="text-sm text-[#6B7280] mt-1">Un facteur ajuste en pourcentage la prévision des mois concernés (inflation, calendrier fiscal, événement exceptionnel).</p>
+</div>
+<form method="post" class="bg-white border border-[#E2E8F0] rounded-xl p-5 grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
+{% csrf_token %}
+<div class="md:col-span-2"><label class="block text-xs font-semibold text-[#686F7C] mb-1" for="id_libelle">Libellé</label>{{ form.libelle }}</div>
+<div class="md:col-span-2"><label class="block text-xs font-semibold text-[#686F7C] mb-1" for="id_categorie">Catégorie</label>{{ form.categorie }}</div>
+<div><label class="block text-xs font-semibold text-[#686F7C] mb-1" for="id_effet_pct">Effet (%)</label>{{ form.effet_pct }}</div>
+<div><label class="block text-xs font-semibold text-[#686F7C] mb-1" for="id_mois_debut">Premier mois</label>{{ form.mois_debut }}</div>
+<div><label class="block text-xs font-semibold text-[#686F7C] mb-1" for="id_mois_fin">Dernier mois</label>{{ form.mois_fin }}</div>
+<div class="md:col-span-4"></div>
+<button type="submit" class="px-4 py-2.5 rounded-lg bg-[#1E2024] text-white text-xs font-semibold">Ajouter</button>
+</form>
+<div class="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+<table class="w-full text-sm">
+<thead class="bg-[#F7F7F8] text-xs text-[#6B7280] uppercase"><tr><th class="text-left px-4 py-2">Libellé</th><th class="text-left px-4 py-2">Catégorie</th><th class="text-left px-4 py-2">Période</th><th class="text-right px-4 py-2">Effet</th><th></th></tr></thead>
+<tbody class="divide-y divide-[#E2E8F0]">
+{% for f in facteurs %}
+<tr><td class="px-4 py-2">{{ f.libelle }}</td><td class="px-4 py-2">{{ f.categorie|default:"Toutes" }}</td><td class="px-4 py-2">{{ f.mois_debut|date:"m/Y" }} - {{ f.mois_fin|date:"m/Y" }}</td><td class="px-4 py-2 text-right">{{ f.effet_pct }} %</td>
+<td class="px-4 py-2 text-right"><form method="post" action="{% url 'supprimer_facteur' f.pk %}" class="m-0">{% csrf_token %}<button type="submit" class="text-xs text-red-700 font-semibold">Supprimer</button></form></td></tr>
+{% empty %}
+<tr><td colspan="5" class="px-4 py-6 text-center text-[#9CA3AF]">Aucun facteur enregistré.</td></tr>
+{% endfor %}
+</tbody></table>
+</div>
+</div>
+{% endblock %}

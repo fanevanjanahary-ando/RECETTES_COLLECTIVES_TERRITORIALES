@@ -45,6 +45,13 @@
  {% if form.jour_echeance_recouvrement.errors %}<p class="text-xs text-red-600 mt-1">{{ form.jour_echeance_recouvrement.errors.0 }}</p>{% endif %}
  </div>
 
+ <div>
+ <label class="block text-xs font-semibold text-[#1E2024] mb-1" for="{{ form.saisonnalite_minimum_mois.id_for_label }}">Historique minimum pour la saisonnalité (mois)</label>
+ <p class="text-[11px] text-[#9CA3AF] mb-1.5">En dessous de ce nombre de mois, la prévision utilise la tendance seule, sans effet saisonnier.</p>
+ {{ form.saisonnalite_minimum_mois }}
+ {% if form.saisonnalite_minimum_mois.errors %}<p class="text-xs text-red-600 mt-1">{{ form.saisonnalite_minimum_mois.errors.0 }}</p>{% endif %}
+ </div>
+
  <label class="flex items-center gap-2.5 text-sm text-[#1E2024] font-medium cursor-pointer">
  {{ form.notifications_email_actives }}
  Envoyer les notifications par e-mail (en plus du centre de notifications)

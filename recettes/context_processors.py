@@ -1,6 +1,5 @@
-from datetime import date
-
 from django.db.models.functions import ExtractYear
+from django.utils import timezone
 
 from .models import Notification, Profil, Recette
 
@@ -29,7 +28,7 @@ def annees_disponibles():
         {a for a in Recette.objects.annotate(a=ExtractYear("mois")).values_list("a", flat=True).distinct()},
         reverse=True,
     )
-    return annees or [date.today().year]
+    return annees or [timezone.localdate().year]
 
 
 def exercice_courant(request):

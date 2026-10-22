@@ -1,6 +1,6 @@
-{% extends "recettes/base.html" %}{% load formats %}
+{% extends "recettes/base.html" %}{% load formats static %}
 {% block title %}Fixer un objectif budgétaire{% endblock %}
-{% block tw_plugins %}{% endblock %}
+{% block tw_css %}<link href="{% static 'recettes/vendor/tailwind-base.css' %}" rel="stylesheet">{% endblock %}
 {% block body_class %}bg-[#f8fafc] font-['Inter',sans-serif] text-slate-800{% endblock %}
 {% block main_class %}relative w-full px-[1rem] pb-[1.5rem] bg-[#f8fafc] min-h-screen{% endblock %}
 {% block content %}
@@ -10,7 +10,7 @@
 <script id="hist-data" type="application/json">{{ historique_json|safe }}</script>
 <script>
  var HIST = JSON.parse(document.getElementById('hist-data').textContent);
- function fmt(n){ return Math.round(n).toString.replace(/\B(?=(\d{3})+(?!\d))/g,'\u202f')+' Ar'; }
+ function fmt(n){ return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'\u202f')+' Ar'; }
  var UN=['zéro','un','deux','trois','quatre','cinq','six','sept','huit','neuf','dix','onze','douze','treize','quatorze','quinze','seize','dix-sept','dix-huit','dix-neuf'];
  var DZ=['','','vingt','trente','quarante','cinquante','soixante','soixante','quatre-vingt','quatre-vingt'];
  function moins100(n){
@@ -32,17 +32,17 @@
  if(mil) out+=moins1000(mil)+' million'+(mil>1?'s':'')+' ';
  if(k) out+=(k===1?'':moins1000(k)+' ')+'mille ';
  if(r) out+=moins1000(r);
- return out.trim;
+ return out.trim();
  }
  function parseMontant(v){ return parseFloat(String(v).replace(/[\s\u00a0\u202f]/g,'').replace(',','.'))||0; }
- function updateAmountInWords{
+ function updateAmountInWords(){
  var v=parseMontant(document.getElementById('target-amount').value);
  var w=document.getElementById('amount-words'); if(w) w.textContent=(v?enLettres(v):'—')+(v?' ariary.':'');
- updateStats;
+ updateStats();
  }
  function selectSector(btn){
  document.querySelectorAll('.sector-btn').forEach(function(b){
- b.className = b.className.replace(/border-emerald-300|bg-emerald-50|text-emerald-900|font-semibold/g,'').trim;
+ b.className = b.className.replace(/border-emerald-300|bg-emerald-50|text-emerald-900|font-semibold/g,'').trim();
  b.classList.add('border-slate-200','bg-white','text-slate-700','font-medium');
  });
  btn.classList.remove('border-slate-200','bg-white','text-slate-700','font-medium');
@@ -50,16 +50,16 @@
  document.getElementById('sector-input').value=btn.dataset.sector||'';
  }
  document.querySelectorAll('button[data-sector]').forEach(function(b){ b.classList.add('sector-btn'); });
- (function{ var cur=document.getElementById('sector-input').value;
+ (function(){ var cur=document.getElementById('sector-input').value;
  var target=Array.prototype.filter.call(document.querySelectorAll('button[data-sector]'),function(b){return b.dataset.sector===cur})[0];
- if(target) selectSector(target); });
- function filterAccounts{
+ if(target) selectSector(target); })();
+ function filterAccounts(){
  var ch=document.getElementById('chapter-select').value, sel=document.getElementById('account-select'), first=null;
  Array.prototype.forEach.call(sel.options,function(o){ var ok=o.dataset.chapter===ch; o.hidden=!ok; o.disabled=!ok; if(ok&&!first) first=o; });
  if(sel.selectedOptions[0]&&sel.selectedOptions[0].disabled&&first) sel.value=first.value;
- updateStats;
+ updateStats();
  }
- function updateStats{
+ function updateStats(){
  var sel=document.getElementById('account-select'), pm=document.getElementById('period-select').value;
  var serie=HIST[sel.value]||[], m=pm?parseInt(pm.split('-')[1],10):0, yr=pm?parseInt(pm.split('-')[0],10):0;
  var same=serie.filter(function(p){ var d=p[0].split('-'); return parseInt(d[1],10)===m && parseInt(d[0],10)<yr; });
@@ -88,6 +88,6 @@
  document.getElementById('chapter-select').addEventListener('change',filterAccounts);
  document.getElementById('account-select').addEventListener('change',updateStats);
  document.getElementById('period-select').addEventListener('change',updateStats);
- (function{ var sel=document.getElementById('account-select'); if(sel.selectedOptions[0]) document.getElementById('chapter-select').value=sel.selectedOptions[0].dataset.chapter; filterAccounts; updateAmountInWords; });
+ (function(){ var sel=document.getElementById('account-select'); if(sel.selectedOptions[0]) document.getElementById('chapter-select').value=sel.selectedOptions[0].dataset.chapter; filterAccounts(); updateAmountInWords(); })();
 </script>
 {% endblock %}

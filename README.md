@@ -1,55 +1,38 @@
-# RECETTES_COLLECTIVES_TERRITORIALES
-CONCEPTION D'UN SYSTÈME D'AIDE À LA DÉCISION POUR LA PRÉVISION DES RECETTES D'UNE COLLECTIVITÉ TERRITORIALE
-
-
-
 # PréviRecettes
 
-Application Django de suivi et de prévision des recettes d'une collectivité territoriale. Les montants sont exprimés en Ariary (Ar).
+Projet pédagogique, données fictives. Prévision et suivi des recettes d'une collectivité territoriale.
 
-## Installation
+## Prérequis
+- Python 3.12 ou plus (requis par Django 6)
+- Node.js 18 ou plus (uniquement pour construire les ressources locales)
 
-```bash
-python3 -m venv venv
+## Installation locale
+Linux / macOS : `./lancer.sh`
+Windows : `lancer.bat`
+
+Le script crée l'environnement virtuel, installe les dépendances Python et Node, construit les ressources locales (Tailwind, polices, Chart.js), applique les migrations et charge les données de démonstration. Aucune ressource n'est chargée depuis Internet.
+
+Sans script :
+```
+python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+npm install
+npm run assets
 python manage.py migrate
 python manage.py generer_donnees_fictives
 python manage.py runserver
 ```
 
-Ou lancer directement :
-
-```bash
-./lancer.sh
-```
-
-Ouvrir http://127.0.0.1:8000/.
-
-## Commandes utiles
-
-```bash
-python manage.py test recettes
-python manage.py envoyer_notifications
-python manage.py createsuperuser
-```
-
-Les comptes de démonstration sont créés par `generer_donnees_fictives`. Leur mot de passe est `demo1234`.
-
 ## Comptes de démonstration
+Mot de passe : `demo1234`. Adresses : admin.demo@, responsable.demo@, elu.demo@, agent.demo@ `collectivite.example`.
+Premier administrateur sur une base vide : `python manage.py createsuperuser` (rôle ADMIN attribué automatiquement) ou `python manage.py creer_admin` avec `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_EMAIL`, `DJANGO_SUPERUSER_PASSWORD`.
 
-| E-mail | Rôle |
-| --- | --- |
-| `admin.demo@collectivite.example` | Administrateur |
-| `responsable.demo@collectivite.example` | Responsable financier |
-| `elu.demo@collectivite.example` | Élu / décideur |
-| `agent.demo@collectivite.example` | Agent de recouvrement |
-| `j.luciani@collectivite.example` | Agent de recouvrement |
-| `c.vasseur@collectivite.example` | Agent de recouvrement |
-| `a.benali@collectivite.example` | Agent de recouvrement |
-| `mh.saintgermain@collectivite.example` | Responsable financier, en attente |
+## Tâches périodiques
+`lancer.sh` démarre `boucle_taches` (notifications et historisation des prévisions, toutes les heures). Manuellement : `python manage.py envoyer_notifications`, `python manage.py actualiser_previsions`.
 
-## Configuration
+## Tests
+`python manage.py test recettes`
 
-Les principales variables d'environnement sont `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_DB_PATH` et les variables SMTP `EMAIL_*`.
-
+## Documentation
+Voir `docs/DOCUMENTATION_TECHNIQUE.md`, `docs/API.md`, `docs/MANUEL_UTILISATEUR.md`, `docs/UML.md`.

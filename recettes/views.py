@@ -1,17 +1,19 @@
+import hashlib
 import json
 from datetime import date, timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordResetForm
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView, LogoutView
 from django.core.mail import EmailMessage
 from django.core.paginator import Paginator
-from django.db.models import Count, Q, Sum
-from django.db.models.functions import ExtractYear
+from django.core.cache import cache
+from django.core.files.base import ContentFile
+from django.db.models import Q, Sum
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
@@ -21,17 +23,20 @@ from django.views.decorators.http import require_POST
 
 from . import exports, graphiques
 from .alertes import (
-    alertes_significatives,
     calculer_ecarts,
     execution_budgetaire,
     recouvrement_par_secteur,
+    sans_double_comptage,
 )
+from .audit import journaliser
+from .cloisonnement import anomalies_visibles, recettes_visibles, secteur_impose
 from .context_processors import annees_disponibles, exercice_courant
 from .decorateurs import role_requis
 from .forms import (
     AnomalieForm,
     CategorieForm,
     ConnexionForm,
+    FacteurEconomiqueForm,
     HabilitationForm,
     ObjectifForm,
     ParametrageForm,
@@ -39,13 +44,13 @@ from .forms import (
     SecteurForm,
     UtilisateurAdminForm,
 )
-from .formats import ar
 from .models import (
     CHAPITRES,
     CHAPITRES_DESCRIPTION,
     Anomalie,
     Categorie,
     EchangeAnomalie,
+    FacteurEconomique,
     Notification,
     ObjectifBudgetaire,
     ParametrageSysteme,
@@ -60,11 +65,17 @@ from .notifications import (
     notifier_habilitation,
     notifier_relance,
 )
-from .prevision import fiabilite_modele, prevision_par_mois, previsions_par_categorie, serie_globale
+from .prevision import (
+    avertissements_modele,
+    fiabilite_modele,
+    prevision_par_mois,
+    previsions_par_categorie,
+)
 from .rapports import (
     comparaison_exercices,
     generer_rapport_pdf,
     generer_rapport_xlsx,
+    mois_depuis_texte,
 )
 
 ROLES_SAISIE = (Profil.Role.ADMIN, Profil.Role.RESPONSABLE, Profil.Role.AGENT)
@@ -76,6 +87,15 @@ MOIS_LABELS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
                "septembre", "octobre", "novembre", "décembre"]
 LIBELLE_CHAPITRE = dict(CHAPITRES)
 
+
+def _chiffres(valeur):
+    valeur = (valeur or "").strip()
+    return valeur if valeur.isdigit() else ""
+
+
+def _json_sur(objet):
+    texte = json.dumps(objet, default=str)
+    return texte.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
 
 def _somme(qs, champ="montant"):
     return qs.aggregate(t=Sum(champ))["t"] or Decimal("0")
@@ -109,13 +129,33 @@ class ConnexionView(LoginView):
     form_class = ConnexionForm
     redirect_authenticated_user = True
 
+    def _cle(self, identifiant):
+        brut = f"{self.request.META.get('REMOTE_ADDR', '')}|{identifiant.strip().lower()}"
+        return "connexion:" + hashlib.sha256(brut.encode()).hexdigest()
+
+    def post(self, request, *args, **kwargs):
+        identifiant = request.POST.get("username", "")
+        if cache.get(self._cle(identifiant), 0) >= settings.LOGIN_MAX_TENTATIVES:
+            journaliser(request, "connexion_bloquee", identifiant)
+            messages.error(
+                request,
+                f"Trop de tentatives échouées. Réessayez dans "
+                f"{settings.LOGIN_VERROUILLAGE_SECONDES // 60} minutes.",
+            )
+            return self.render_to_response(
+                self.get_context_data(form=self.get_form_class()(request))
+            )
+        return super().post(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["exercices"] = annees_disponibles()
         return ctx
 
     def form_valid(self, form):
+        cache.delete(self._cle(self.request.POST.get("username", "")))
         reponse = super().form_valid(form)
+        journaliser(self.request, "connexion", self.request.user.username)
         try:
             annee = int(self.request.POST.get("exercice", ""))
             if annee in annees_disponibles():
@@ -127,6 +167,13 @@ class ConnexionView(LoginView):
         else:
             self.request.session.set_expiry(0)
         return reponse
+
+    def form_invalid(self, form):
+        identifiant = self.request.POST.get("username", "")
+        cle = self._cle(identifiant)
+        cache.set(cle, cache.get(cle, 0) + 1, settings.LOGIN_VERROUILLAGE_SECONDES)
+        journaliser(self.request, "connexion_echec", identifiant)
+        return super().form_invalid(form)
 
 
 class DeconnexionView(LogoutView):
@@ -183,24 +230,6 @@ def dashboard(request):
     montant_anomalies = _somme(anomalies_ouvertes, "montant")
 
     previsions = previsions_par_categorie()
-    globale = serie_globale()
-    svg_traj = graphiques.svg_trajectoire(globale)
-    hist = globale["mois_historique"][-12:]
-    etiquettes = []
-    if hist:
-        etiquettes = [hist[0], hist[len(hist) // 3] if len(hist) > 3 else hist[0], hist[-1] + " (Actuel)"]
-        etiquettes.append((globale["mois_prevus"][-1] + " (Projeté)") if globale["mois_prevus"] else "")
-
-    focus = None
-    if pire:
-        serie = previsions.get(str(pire.categorie_id))
-        if serie:
-            focus = {
-                "ecart": pire,
-                "svg": graphiques.svg_focus(
-                    serie["montants_historique"], float(pire.cible), serie["montants_prevus"], pire.ecart_pct
-                ),
-            }
 
     return render(
         request,
@@ -216,10 +245,8 @@ def dashboard(request):
             "suivi_secteurs": suivi,
             "anomalies_ouvertes_total": anomalies_ouvertes.count(),
             "montant_anomalies": montant_anomalies,
-            "svg_trajectoire": svg_traj,
-            "etiquettes_trajectoire": etiquettes,
-            "focus": focus,
-            "data_json": json.dumps(previsions),
+            "avertissements": avertissements_modele(previsions),
+            "data_json": _json_sur(previsions),
             "horizon": parametres.mois_a_prevoir,
         },
     )
@@ -242,12 +269,13 @@ def liste_recettes(request):
     annee = exercice_courant(request)
     periodes = _periodes(annee)
     periode = request.GET.get("periode") or periodes[0][0]
-    secteur_id = request.GET.get("secteur") or ""
-    chapitre = request.GET.get("chapitre") or ""
-    categorie_id = request.GET.get("categorie") or ""
+    impose = secteur_impose(request.user)
+    secteur_id = str(impose) if impose else _chiffres(request.GET.get("secteur"))
+    chapitre = request.GET.get("chapitre") if request.GET.get("chapitre") in dict(CHAPITRES) else ""
+    categorie_id = _chiffres(request.GET.get("categorie"))
     q = (request.GET.get("q") or "").strip()
 
-    recettes = Recette.objects.select_related("categorie", "secteur", "saisie_par")
+    recettes = recettes_visibles(request.user).select_related("categorie", "secteur", "saisie_par")
     if periode == "annee":
         recettes = recettes.filter(mois__year=annee)
     elif periode == "toutes":
@@ -291,10 +319,10 @@ def liste_recettes(request):
             "fenetre": fenetre,
             "total_selection": total_selection,
             "total_page": total_page,
-            "nb_total": Recette.objects.count(),
+            "nb_total": recettes_visibles(request.user).count(),
             "periodes": periodes,
             "periode": periode,
-            "secteurs": Secteur.objects.filter(actif=True),
+            "secteurs": Secteur.objects.filter(actif=True, pk=impose) if impose else Secteur.objects.filter(actif=True),
             "chapitres": [(c, LIBELLE_CHAPITRE[c]) for c, _ in CHAPITRES if Categorie.objects.filter(chapitre=c).exists()],
             "secteur_filtre": secteur_id,
             "chapitre_filtre": chapitre,
@@ -334,10 +362,10 @@ def _contexte_formulaire_recette(request, form, titre, recette=None, lecture=Fal
         "titre": titre,
         "recette": recette,
         "lecture": lecture,
-        "impact_json": json.dumps(_impact_data(annee)),
+        "impact_json": _json_sur(_impact_data(annee)),
         "annee": annee,
         "dernieres": Recette.objects.select_related("categorie", "secteur").order_by("-date_saisie")[:3],
-        "aujourdhui": date.today().isoformat(),
+        "aujourdhui": timezone.localdate().isoformat(),
     }
 
 
@@ -350,20 +378,26 @@ def ajouter_recette(request):
             recette.saisie_par = request.user
             recette.full_clean(exclude=["saisie_par"])
             recette.save()
+            journaliser(
+                request, "recette_creation", recette.reference,
+                f"{recette.categorie} / {recette.secteur} / {recette.mois:%m/%Y} / {recette.montant} Ar",
+            )
             messages.success(request, f"Recette {recette.reference} enregistrée.")
             notifier_ecarts_significatifs()
             if request.POST.get("action") == "nouveau":
                 return redirect("ajouter_recette")
             return redirect("liste_recettes")
     else:
-        form = RecetteForm(utilisateur=request.user, initial={"date_imputation": date.today()})
+        form = RecetteForm(utilisateur=request.user, initial={"date_imputation": timezone.localdate()})
     return render(request, "recettes/formulaire_recette.html",
                   _contexte_formulaire_recette(request, form, "Nouvelle recette"))
 
 
 @login_required
 def detail_recette(request, pk):
-    recette = get_object_or_404(Recette.objects.select_related("categorie", "secteur", "saisie_par"), pk=pk)
+    recette = get_object_or_404(
+        recettes_visibles(request.user).select_related("categorie", "secteur", "saisie_par"), pk=pk
+    )
     form = RecetteForm(instance=recette, utilisateur=request.user)
     return render(request, "recettes/formulaire_recette.html",
                   _contexte_formulaire_recette(request, form, f"Recette {recette.reference}", recette, lecture=True))
@@ -375,7 +409,13 @@ def modifier_recette(request, pk):
     if request.method == "POST":
         form = RecetteForm(request.POST, request.FILES, instance=recette, utilisateur=request.user)
         if form.is_valid():
+            avant = f"{recette.categorie} / {recette.secteur} / {recette.mois:%m/%Y} / {recette.montant} Ar"
             form.save()
+            journaliser(
+                request, "recette_modification", recette.reference,
+                f"avant : {avant} ; apres : {recette.categorie} / {recette.secteur} / "
+                f"{recette.mois:%m/%Y} / {recette.montant} Ar",
+            )
             messages.success(request, "Recette modifiée.")
             notifier_ecarts_significatifs()
             return redirect("liste_recettes")
@@ -389,15 +429,20 @@ def modifier_recette(request, pk):
 def supprimer_recette(request, pk):
     recette = get_object_or_404(Recette, pk=pk)
     if request.method == "POST":
+        journaliser(
+            request, "recette_suppression", recette.reference,
+            f"{recette.categorie} / {recette.secteur} / {recette.mois:%m/%Y} / "
+            f"{recette.montant} Ar / {recette.libelle}",
+        )
         recette.delete()
         messages.success(request, "Recette supprimée.")
         return redirect("liste_recettes")
     return render(request, "recettes/confirmer_suppression.html", {"objet": recette})
 
 
-@login_required
+@role_requis(*ROLES_SAISIE)
 def bordereau(request, pk):
-    recette = get_object_or_404(Recette, pk=pk)
+    recette = get_object_or_404(recettes_visibles(request.user), pk=pk)
     if not recette.piece_jointe:
         raise Http404("Aucune pièce jointe.")
     return FileResponse(recette.piece_jointe.open("rb"), as_attachment=False, filename=recette.piece_jointe.name.split("/")[-1])
@@ -552,8 +597,10 @@ def modifier_secteur(request, pk):
     donnees = request.POST.copy()
     if "suspendre" in donnees:
         donnees.pop("actif", None)
-    else:
+    elif "reactiver" in donnees or secteur.actif:
         donnees["actif"] = "on"
+    else:
+        donnees.pop("actif", None)
     form = SecteurForm(donnees, instance=secteur)
     if form.is_valid():
         form.save()
@@ -607,7 +654,7 @@ def suivi_secteurs(request):
     )
 
 
-def _projection_globale(annee):
+def _projection_globale(annee, previsions_plates):
     """Séries (réalisé / objectif / prévision) sur 6 mois : 4 derniers mois connus + 2 à venir."""
     dernier = Recette.objects.filter(mois__year=annee).order_by("-mois").values_list("mois", flat=True).first()
     if not dernier:
@@ -623,7 +670,7 @@ def _projection_globale(annee):
         .values("mois").annotate(t=Sum("montant_cible"))
     }
     prevus = {}
-    for (_, m), v in prevision_par_mois().items():
+    for (_, m), v in previsions_plates.items():
         prevus[m] = prevus.get(m, 0.0) + v
     return {
         "mois": mois,
@@ -639,7 +686,7 @@ def liste_objectifs(request):
     tous_ecarts = calculer_ecarts(annee)
     mois_dispo = sorted({e.mois for e in tous_ecarts}, reverse=True)
     choix_mois = request.GET.get("mois") or (mois_dispo[0].strftime("%Y-%m") if mois_dispo else "tous")
-    categorie_id = request.GET.get("categorie") or ""
+    categorie_id = _chiffres(request.GET.get("categorie"))
     ecarts = tous_ecarts
     if choix_mois != "tous":
         ecarts = [e for e in ecarts if e.mois.strftime("%Y-%m") == choix_mois]
@@ -653,14 +700,16 @@ def liste_objectifs(request):
             mois_label = f"{MOIS_LABELS[int(mm) - 1].capitalize()} {y}"
         except (ValueError, IndexError):
             mois_label = choix_mois
-    total_cible = sum((e.cible for e in ecarts), Decimal("0"))
-    total_realise = sum((e.realise for e in ecarts), Decimal("0"))
+    ecarts_totaux = sans_double_comptage(ecarts)
+    total_cible = sum((e.cible for e in ecarts_totaux), Decimal("0"))
+    total_realise = sum((e.realise for e in ecarts_totaux), Decimal("0"))
     taux = float(total_realise / total_cible * 100) if total_cible else None
     ecart_net = total_realise - total_cible
     alertes = [e for e in ecarts if e.significatif]
     pire = alertes[0] if alertes else None
 
-    previsions = prevision_par_mois()
+    previsions_cat = previsions_par_categorie()
+    previsions = prevision_par_mois(previsions_cat)
     confrontation = []
     for objectif in ObjectifBudgetaire.objects.filter(statut="INSCRIT", secteur__isnull=True, mois__year=annee).select_related("categorie"):
         prevu = previsions.get((objectif.categorie_id, objectif.mois))
@@ -673,7 +722,7 @@ def liste_objectifs(request):
         })
     confrontation.sort(key=lambda c: (c["mois"], c["categorie"]))
 
-    proj = _projection_globale(annee)
+    proj = _projection_globale(annee, previsions)
     return render(
         request,
         "recettes/liste_objectifs.html",
@@ -699,6 +748,7 @@ def liste_objectifs(request):
             "proj_mois": [m for m in (proj["mois"] if proj else [])],
             "peut_gerer": request.user.profil.role in ROLES_GESTION,
             "parametres": ParametrageSysteme.charger(),
+            "avertissements": avertissements_modele(previsions_cat),
             "annee": annee,
         },
     )
@@ -716,6 +766,11 @@ def ajouter_objectif(request):
             objectif.statut = ObjectifBudgetaire.Statut.BROUILLON if brouillon else ObjectifBudgetaire.Statut.INSCRIT
             objectif.full_clean(exclude=["fixe_par"])
             objectif.save()
+            journaliser(
+                request, "objectif_creation", f"{objectif.categorie} {objectif.mois:%m/%Y}",
+                f"{objectif.get_type_budget_display()} / {objectif.secteur or 'consolidé'} / "
+                f"{objectif.montant_cible} Ar",
+            )
             messages.success(request, "Brouillon enregistré." if brouillon else "Objectif budgétaire inscrit au budget prévisionnel.")
             if not brouillon:
                 notifier_ecarts_significatifs()
@@ -733,12 +788,12 @@ def ajouter_objectif(request):
         {
             "form": form,
             "annee": annee,
-            "mois_defaut": date.today().replace(day=1),
+            "mois_defaut": timezone.localdate().replace(day=1),
             "mois_options": mois_options,
             "categories": categories,
             "chapitres": CHAPITRES,
             "secteurs": Secteur.objects.filter(actif=True),
-            "historique_json": json.dumps(hist),
+            "historique_json": _json_sur(hist),
             "recents": ObjectifBudgetaire.objects.select_related("categorie", "fixe_par").order_by("-date_creation")[:3],
             "parametres": ParametrageSysteme.charger(),
         },
@@ -748,7 +803,13 @@ def ajouter_objectif(request):
 @role_requis(*ROLES_GESTION)
 @require_POST
 def supprimer_objectif(request, pk):
-    get_object_or_404(ObjectifBudgetaire, pk=pk).delete()
+    objectif = get_object_or_404(ObjectifBudgetaire, pk=pk)
+    journaliser(
+        request, "objectif_suppression", f"{objectif.categorie} {objectif.mois:%m/%Y}",
+        f"{objectif.get_type_budget_display()} / {objectif.secteur or 'consolidé'} / "
+        f"{objectif.montant_cible} Ar",
+    )
+    objectif.delete()
     messages.success(request, "Objectif supprimé.")
     return redirect("liste_objectifs")
 
@@ -759,7 +820,7 @@ def comparaison(request):
         nb_annees = max(2, min(int(request.GET.get("annees", 3)), 10))
     except ValueError:
         nb_annees = 3
-    donnees = comparaison_exercices(nb_annees)
+    donnees = comparaison_exercices(nb_annees, exercice_courant(request))
     graphes = {}
     if donnees["annees"]:
         groupes = [{"label": c["chapitre"], "valeurs": [float(c["totaux"][a]) for a in donnees["annees"]]}
@@ -832,23 +893,27 @@ def _part_recettes_propres(donnees):
 
 @role_requis(*ROLES_ANOMALIES)
 def liste_anomalies(request):
-    secteur_id = request.GET.get("secteur") or ""
-    anomalies = Anomalie.objects.select_related("categorie", "secteur", "signale_par", "assigne_a").filter(
-        traitee=False, brouillon=False)
+    impose = secteur_impose(request.user)
+    secteur_id = str(impose) if impose else _chiffres(request.GET.get("secteur"))
+    visibles = anomalies_visibles(request.user)
+    relations = ("categorie", "secteur", "signale_par", "assigne_a")
     if request.GET.get("archives"):
-        anomalies = Anomalie.objects.select_related("categorie", "secteur", "signale_par", "assigne_a").filter(traitee=True)
+        anomalies = visibles.select_related(*relations).filter(traitee=True)
+    else:
+        anomalies = visibles.select_related(*relations).filter(traitee=False, brouillon=False)
     if secteur_id:
         anomalies = anomalies.filter(secteur_id=secteur_id)
     liste = list(anomalies)
     brouillons = Anomalie.objects.filter(brouillon=True, signale_par=request.user)
     selection = None
-    if request.GET.get("dossier"):
-        selection = Anomalie.objects.filter(pk=request.GET["dossier"]).select_related("categorie", "secteur", "assigne_a", "signale_par").first()
+    dossier = _chiffres(request.GET.get("dossier"))
+    if dossier:
+        selection = visibles.filter(pk=dossier).select_related(*relations).first()
     if selection is None and liste:
         selection = liste[0]
-    ouvertes = Anomalie.objects.filter(traitee=False, brouillon=False)
+    ouvertes = visibles.filter(traitee=False, brouillon=False)
     en_retard = [a for a in ouvertes if a.en_retard]
-    clotures = Anomalie.objects.filter(traitee=True, date_regularisation__isnull=False)
+    clotures = visibles.filter(traitee=True, date_regularisation__isnull=False)
     delais = [(a.date_regularisation - a.date_signalement).days for a in clotures]
     montant_retard = sum((a.montant for a in en_retard), Decimal("0"))
     return render(
@@ -858,7 +923,7 @@ def liste_anomalies(request):
             "anomalies": liste,
             "selection": selection,
             "echanges": selection.echanges.select_related("auteur") if selection else [],
-            "secteurs": Secteur.objects.filter(actif=True),
+            "secteurs": Secteur.objects.filter(actif=True, pk=impose) if impose else Secteur.objects.filter(actif=True),
             "secteur_filtre": secteur_id,
             "archives": bool(request.GET.get("archives")),
             "nb_ouvertes": ouvertes.count(),
@@ -876,7 +941,7 @@ def liste_anomalies(request):
 def signaler_anomalie(request, pk=None):
     anomalie = None
     if pk:
-        anomalie = get_object_or_404(Anomalie, pk=pk)
+        anomalie = get_object_or_404(anomalies_visibles(request.user), pk=pk)
         if not (anomalie.brouillon and anomalie.signale_par_id == request.user.pk) and request.user.profil.role not in ROLES_GESTION:
             messages.error(request, "Ce dossier ne peut plus être modifié.")
             return redirect("liste_anomalies")
@@ -898,7 +963,10 @@ def signaler_anomalie(request, pk=None):
             messages.success(request, "Anomalie signalée et responsables notifiés.")
             return redirect(f"{reverse('liste_anomalies')}?dossier={objet.pk}")
     else:
-        initial = {"date_constat": date.today(), "date_echeance": date.today() + timedelta(days=15)}
+        initial = {
+            "date_constat": timezone.localdate(),
+            "date_echeance": timezone.localdate() + timedelta(days=15),
+        }
         secteur = getattr(request.user.profil, "secteur", None)
         if secteur:
             initial["secteur"] = secteur
@@ -910,7 +978,7 @@ def signaler_anomalie(request, pk=None):
             "form": form,
             "anomalie": anomalie,
             "nb_en_cours": Anomalie.objects.filter(traitee=False, brouillon=False).count(),
-            "prochaine_ref": anomalie.reference if anomalie else f"ANO-{date.today().year}-{(Anomalie.objects.order_by('-pk').values_list('pk', flat=True).first() or 0) + 1:03d}",
+            "prochaine_ref": anomalie.reference if anomalie else f"ANO-{timezone.localdate().year}-{(Anomalie.objects.order_by('-pk').values_list('pk', flat=True).first() or 0) + 1:03d}",
         },
     )
 
@@ -934,11 +1002,12 @@ def relancer_anomalie(request, pk):
     anomalie = get_object_or_404(Anomalie, pk=pk)
     if anomalie.assigne_a is None:
         messages.error(request, "Aucun régisseur n'est assigné à ce dossier.")
-    else:
-        notifier_relance(anomalie, request.user)
+    elif notifier_relance(anomalie, request.user):
         EchangeAnomalie.objects.create(anomalie=anomalie, auteur=request.user, titre="Relance du régisseur",
                                        texte=f"Relance adressée à {anomalie.assigne_a.get_full_name() or anomalie.assigne_a.username}.")
         messages.success(request, "Relance envoyée.")
+    else:
+        messages.info(request, "Ce régisseur a déjà été relancé aujourd'hui sur ce dossier.")
     return redirect(f"{reverse('liste_anomalies')}?dossier={pk}")
 
 
@@ -949,14 +1018,15 @@ def supprimer_anomalie(request, pk):
     if request.user.profil.role not in ROLES_GESTION and not (anomalie.brouillon and anomalie.signale_par_id == request.user.pk):
         messages.error(request, "Vous ne pouvez supprimer que vos brouillons.")
         return redirect("liste_anomalies")
+    journaliser(request, "anomalie_suppression", anomalie.reference, anomalie.intitule)
     anomalie.delete()
     messages.success(request, "Dossier supprimé.")
     return redirect("liste_anomalies")
 
 
-@login_required
+@role_requis(*ROLES_ANOMALIES)
 def piece_anomalie(request, pk):
-    anomalie = get_object_or_404(Anomalie, pk=pk)
+    anomalie = get_object_or_404(anomalies_visibles(request.user), pk=pk)
     if not anomalie.piece_jointe:
         raise Http404("Aucune pièce jointe.")
     return FileResponse(anomalie.piece_jointe.open("rb"), filename=anomalie.piece_jointe.name.split("/")[-1])
@@ -1057,6 +1127,15 @@ def liste_utilisateurs(request):
     )
 
 
+def _est_dernier_admin_actif(utilisateur):
+    profil = getattr(utilisateur, "profil", None)
+    if not (profil and profil.role == Profil.Role.ADMIN and utilisateur.is_active):
+        return False
+    return not User.objects.filter(
+        is_active=True, profil__role=Profil.Role.ADMIN
+    ).exclude(pk=utilisateur.pk).exists()
+
+
 def _envoyer_lien_mot_de_passe(request, utilisateur):
     if not utilisateur.email:
         return False
@@ -1067,6 +1146,7 @@ def _envoyer_lien_mot_de_passe(request, utilisateur):
             subject_template_name="recettes/email/mot_de_passe_sujet.txt",
             email_template_name="recettes/email/mot_de_passe_corps.txt",
             from_email=None,
+            use_https=request.is_secure(),
         )
         return True
     return False
@@ -1095,9 +1175,19 @@ def modifier_utilisateur(request, pk):
     donnees = request.POST.copy()
     if utilisateur == request.user:
         donnees["is_active"] = "on"
+        donnees["role"] = Profil.Role.ADMIN
+    elif _est_dernier_admin_actif(utilisateur) and (
+        donnees.get("role") != Profil.Role.ADMIN or "is_active" not in donnees
+    ):
+        messages.error(request, "Impossible : ce compte est le dernier administrateur actif.")
+        return redirect("liste_utilisateurs")
     form = UtilisateurAdminForm(donnees, instance=utilisateur)
     if form.is_valid():
         form.save()
+        journaliser(
+            request, "utilisateur_modification", utilisateur.username,
+            f"role={utilisateur.profil.role}",
+        )
         messages.success(request, f"Compte « {utilisateur.email or utilisateur.username} » mis à jour.")
     else:
         _erreurs_en_messages(request, form)
@@ -1108,9 +1198,13 @@ def modifier_utilisateur(request, pk):
 @require_POST
 def basculer_utilisateur(request, pk):
     utilisateur = get_object_or_404(User, pk=pk)
-    if utilisateur == request.user:
-        messages.error(request, "Vous ne pouvez pas désactiver votre propre compte.")
+    if utilisateur == request.user or _est_dernier_admin_actif(utilisateur):
+        messages.error(
+            request,
+            "Ce compte ne peut pas être désactivé (compte courant ou dernier administrateur actif).",
+        )
         return redirect("liste_utilisateurs")
+    journaliser(request, "utilisateur_bascule", utilisateur.username)
     utilisateur.is_active = not utilisateur.is_active
     utilisateur.save(update_fields=["is_active"])
     etat = "réactivé" if utilisateur.is_active else "désactivé"
@@ -1123,6 +1217,14 @@ def basculer_utilisateur(request, pk):
 def arbitrer_utilisateur(request, pk):
     utilisateur = get_object_or_404(User, pk=pk)
     profil = utilisateur.profil
+    if not profil.en_attente or utilisateur == request.user:
+        messages.error(request, "Cette demande n'est pas en attente d'arbitrage.")
+        return redirect("liste_utilisateurs")
+    journaliser(
+        request,
+        "habilitation_" + ("validation" if request.POST.get("decision") == "valider" else "refus"),
+        utilisateur.username,
+    )
     if request.POST.get("decision") == "valider":
         utilisateur.is_active = True
         utilisateur.save(update_fields=["is_active"])
@@ -1130,7 +1232,6 @@ def arbitrer_utilisateur(request, pk):
         profil.save(update_fields=["en_attente"])
         if utilisateur.email:
             from django.core.mail import send_mail
-            from django.conf import settings
 
             send_mail(
                 "[Recettes collectivité] Habilitation validée",
@@ -1166,6 +1267,7 @@ def parametrage(request):
             objet = form.save(commit=False)
             objet.modifie_par = request.user
             objet.save()
+            journaliser(request, "parametrage_modification", "Paramétrage du système", str(form.cleaned_data))
             messages.success(request, "Paramétrage enregistré. Les prévisions et alertes en tiennent compte immédiatement.")
             return redirect(_page_suivante(request, "parametrage"))
     else:
@@ -1180,14 +1282,17 @@ DOCUMENTS = [
 ]
 
 
-def _construire_rapport(type_doc, format_, annee):
+def _construire_rapport(type_doc, format_, annee, mois=None, secteur_id=None):
     if format_ == "CSV":
-        reponse = exports.export_anomalies_csv() if type_doc == "ANOMALIES" else exports.export_recettes_csv()
+        reponse = (
+            exports.export_anomalies_csv(secteur_id=secteur_id) if type_doc == "ANOMALIES"
+            else exports.export_recettes_csv(annee=annee, secteur_id=secteur_id)
+        )
         return reponse.content, reponse["Content-Type"], "csv"
     if format_ == "XLSX":
-        contenu = generer_rapport_xlsx(type_doc, annee).getvalue()
+        contenu = generer_rapport_xlsx(type_doc, annee, mois).getvalue()
         return contenu, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"
-    return generer_rapport_pdf(type_doc, annee).getvalue(), "application/pdf", "pdf"
+    return generer_rapport_pdf(type_doc, annee, mois).getvalue(), "application/pdf", "pdf"
 
 
 @role_requis(*ROLES_BUDGET)
@@ -1200,13 +1305,23 @@ def rapports(request):
         format_ = request.POST.get("format", "PDF")
         if type_doc not in dict(RapportGenere.TypeDoc.choices) or format_ not in dict(RapportGenere.Format.choices):
             raise Http404
-        contenu, mime, extension = _construire_rapport(type_doc, format_, annee)
+        mois = mois_depuis_texte(request.POST.get("mois")) if type_doc == "LIASSE" else None
+        if mois and mois.year != annee:
+            annee = mois.year
+        contenu, mime, extension = _construire_rapport(type_doc, format_, annee, mois)
+        periode = f"{MOIS_LABELS[mois.month - 1].capitalize()} {mois.year}" if mois else f"Exercice {annee}"
         rapport = RapportGenere.objects.create(
-            type_doc=type_doc, format=format_, periode=f"Exercice {annee}", cree_par=request.user, taille=len(contenu),
+            type_doc=type_doc, format=format_, periode=periode, cree_par=request.user, taille=len(contenu),
         )
+        rapport.fichier.save(f"{rapport.reference}.{extension}", ContentFile(contenu), save=True)
+        journaliser(request, "rapport_genere", rapport.reference, f"{type_doc} {format_} {periode}")
         if request.POST.get("envoi") == "email":
-            _envoyer_rapport(request.user, rapport, contenu, mime, extension)
-            messages.success(request, f"Rapport {rapport.reference} transmis à {request.user.email}.")
+            if not request.user.email:
+                messages.error(request, "Votre compte n'a pas d'adresse e-mail : aucun envoi effectué.")
+            elif _envoyer_rapport(request.user, rapport, contenu, mime, extension):
+                messages.success(request, f"Rapport {rapport.reference} transmis à {request.user.email}.")
+            else:
+                messages.error(request, "L'envoi de l'e-mail a échoué. Le rapport reste téléchargeable depuis l'historique.")
             return redirect("rapports")
         reponse = HttpResponse(contenu, content_type=mime)
         reponse["Content-Disposition"] = f'attachment; filename="{rapport.reference}.{extension}"'
@@ -1221,7 +1336,7 @@ def rapports(request):
         cible = _somme(ObjectifBudgetaire.objects.filter(
             mois__year=annee, statut="INSCRIT", secteur__isnull=True, categorie__chapitre=code), "montant_cible")
         if realise or cible:
-            par_chapitre.append({"code": code, "libelle": libelle.split("— ")[1], "realise": realise,
+            par_chapitre.append({"code": code, "libelle": libelle.split("— ")[-1], "realise": realise,
                                  "pct": round(float(realise / cible * 100), 1) if cible else None})
     historique = RapportGenere.objects.select_related("cree_par")
     return render(
@@ -1237,7 +1352,14 @@ def rapports(request):
             "budget": budget,
             "reste": budget - total if budget else None,
             "pct_budget": round(float(total / budget * 100), 1) if budget else None,
-            "par_chapitre": par_chapitre[:4],
+            "par_chapitre": par_chapitre,
+            "mois_options": [
+                (d.strftime("%Y-%m"), f"{MOIS_LABELS[d.month - 1].capitalize()} {d.year}")
+                for d in sorted(
+                    set(Recette.objects.filter(mois__year=annee).values_list("mois", flat=True)),
+                    reverse=True,
+                )
+            ],
             "nb_anomalies": Anomalie.objects.filter(traitee=False, brouillon=False).count(),
             "montant_anomalies": _somme(Anomalie.objects.filter(traitee=False, brouillon=False), "montant"),
             "exports": [(k, v) for k, v in [
@@ -1251,22 +1373,37 @@ def rapports(request):
 
 
 def _envoyer_rapport(utilisateur, rapport, contenu, mime, extension):
-    from django.conf import settings
-
     message = EmailMessage(
         subject=f"[Recettes collectivité] {rapport.get_type_doc_display()} — {rapport.reference}",
         body=f"Bonjour,\n\nVeuillez trouver ci-joint le document {rapport.reference} ({rapport.periode}).",
         from_email=settings.DEFAULT_FROM_EMAIL, to=[utilisateur.email],
     )
     message.attach(f"{rapport.reference}.{extension}", contenu, mime)
-    message.send(fail_silently=True)
+    try:
+        return bool(message.send(fail_silently=False))
+    except Exception:
+        return False
 
 
 @role_requis(*ROLES_BUDGET)
 def telecharger_rapport(request, pk):
     rapport = get_object_or_404(RapportGenere, pk=pk)
-    annee = int(rapport.periode.split()[-1]) if rapport.periode.split()[-1].isdigit() else exercice_courant(request)
-    contenu, mime, extension = _construire_rapport(rapport.type_doc, rapport.format, annee)
+    if rapport.fichier:
+        extension = rapport.fichier.name.rsplit(".", 1)[-1]
+        mimes = {
+            "pdf": "application/pdf",
+            "csv": "text/csv; charset=utf-8",
+            "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }
+        with rapport.fichier.open("rb") as fichier:
+            contenu = fichier.read()
+        mime = mimes.get(extension, "application/octet-stream")
+    else:
+        annee = (
+            int(rapport.periode.split()[-1])
+            if rapport.periode.split()[-1].isdigit() else exercice_courant(request)
+        )
+        contenu, mime, extension = _construire_rapport(rapport.type_doc, rapport.format, annee)
     reponse = HttpResponse(contenu, content_type=mime)
     reponse["Content-Disposition"] = f'attachment; filename="{rapport.reference}.{extension}"'
     return reponse
@@ -1300,4 +1437,38 @@ def export_csv(request, jeu):
     if request.user.profil.role == Profil.Role.AGENT and jeu not in ("recettes", "anomalies"):
         messages.error(request, "Vous n'avez pas les droits nécessaires pour cet export.")
         return redirect("dashboard")
-    return generateur()
+    journaliser(request, "export_csv", jeu)
+    return generateur(annee=exercice_courant(request), secteur_id=secteur_impose(request.user))
+
+
+@role_requis(Profil.Role.ADMIN, Profil.Role.RESPONSABLE)
+def liste_facteurs(request):
+    if request.method == "POST":
+        form = FacteurEconomiqueForm(request.POST)
+        if form.is_valid():
+            facteur = form.save(commit=False)
+            facteur.cree_par = request.user
+            facteur.full_clean(exclude=["cree_par"])
+            facteur.save()
+            journaliser(request, "facteur_creation", facteur.libelle, str(facteur.effet_pct))
+            messages.success(
+                request, "Facteur économique enregistré. Les prévisions en tiennent compte immédiatement."
+            )
+            return redirect("liste_facteurs")
+        _erreurs_en_messages(request, form)
+    else:
+        form = FacteurEconomiqueForm()
+    return render(request, "recettes/facteurs.html", {
+        "form": form,
+        "facteurs": FacteurEconomique.objects.select_related("categorie"),
+    })
+
+
+@role_requis(Profil.Role.ADMIN, Profil.Role.RESPONSABLE)
+@require_POST
+def supprimer_facteur(request, pk):
+    facteur = get_object_or_404(FacteurEconomique, pk=pk)
+    journaliser(request, "facteur_suppression", facteur.libelle)
+    facteur.delete()
+    messages.success(request, "Facteur supprimé.")
+    return redirect("liste_facteurs")

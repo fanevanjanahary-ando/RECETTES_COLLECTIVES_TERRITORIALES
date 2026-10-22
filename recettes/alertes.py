@@ -2,7 +2,8 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
+from django.utils import timezone
 
 from .models import Anomalie, ObjectifBudgetaire, ParametrageSysteme, Recette, Secteur
 
@@ -19,6 +20,7 @@ class Ecart:
     code: str = ""
     secteur: str = ""
     objectif_id: int = 0
+    secteur_id: int = 0
 
     @property
     def significatif(self) -> bool:
@@ -58,6 +60,32 @@ def _realise_de(objectif, par_cat, par_cat_secteur):
         return par_cat_secteur.get((objectif.categorie_id, objectif.mois, objectif.secteur_id))
     return par_cat.get((objectif.categorie_id, objectif.mois))
 
+def _realise_ou_zero(objectif, par_cat, par_cat_secteur):
+    realise = _realise_de(objectif, par_cat, par_cat_secteur)
+    if realise is None:
+        debut_mois_courant = timezone.localdate().replace(day=1)
+        if objectif.mois < debut_mois_courant:
+            return Decimal("0")
+    return realise
+
+def _objectifs_agreges(annee: int | None = None):
+    objectifs = _objectifs_inscrits().order_by("pk")
+    if annee:
+        objectifs = objectifs.filter(mois__year=annee)
+    groupes = {}
+    for objectif in objectifs:
+        cle = (objectif.categorie_id, objectif.mois, objectif.secteur_id)
+        if cle in groupes:
+            groupes[cle]["cible"] += objectif.montant_cible
+        else:
+            groupes[cle] = {"objectif": objectif, "cible": objectif.montant_cible}
+    return list(groupes.values())
+
+
+def sans_double_comptage(ecarts):
+    consolides = {(e.categorie_id, e.mois) for e in ecarts if not e.secteur_id}
+    return [e for e in ecarts if not e.secteur_id or (e.categorie_id, e.mois) not in consolides]
+
 
 def calculer_ecarts(annee: int | None = None):
     seuil_pct = float(ParametrageSysteme.charger().seuil_alerte_pct)
@@ -65,26 +93,25 @@ def calculer_ecarts(annee: int | None = None):
     par_cat_secteur = realise_par_categorie_mois_secteur()
 
     ecarts = []
-    objectifs = _objectifs_inscrits()
-    if annee:
-        objectifs = objectifs.filter(mois__year=annee)
-    for objectif in objectifs:
-        realise = _realise_de(objectif, par_cat, par_cat_secteur)
-        if realise is None or objectif.montant_cible == 0:
+    for groupe in _objectifs_agreges(annee):
+        objectif, cible = groupe["objectif"], groupe["cible"]
+        realise = _realise_ou_zero(objectif, par_cat, par_cat_secteur)
+        if realise is None or cible == 0:
             continue
-        ecart_pct = float((realise - objectif.montant_cible) / objectif.montant_cible * 100)
+        ecart_pct = float((realise - cible) / cible * 100)
         ecarts.append(
             Ecart(
                 categorie=objectif.categorie.nom,
                 categorie_id=objectif.categorie_id,
                 mois=objectif.mois,
                 realise=realise,
-                cible=objectif.montant_cible,
+                cible=cible,
                 ecart_pct=round(ecart_pct, 1),
                 seuil_pct=seuil_pct,
                 code=objectif.categorie.code,
                 secteur=objectif.secteur.nom if objectif.secteur_id else "",
                 objectif_id=objectif.pk,
+                secteur_id=objectif.secteur_id or 0,
             )
         )
     ecarts.sort(key=lambda e: abs(e.ecart_pct), reverse=True)
@@ -96,19 +123,9 @@ def alertes_significatives(annee: int | None = None):
 
 
 def execution_budgetaire(annee: int | None = None):
-    par_cat = realise_par_categorie_mois()
-    par_cat_secteur = realise_par_categorie_mois_secteur()
-    total_realise = Decimal("0")
-    total_cible = Decimal("0")
-    objectifs = _objectifs_inscrits()
-    if annee:
-        objectifs = objectifs.filter(mois__year=annee)
-    for objectif in objectifs:
-        realise = _realise_de(objectif, par_cat, par_cat_secteur)
-        if realise is None:
-            continue
-        total_realise += realise
-        total_cible += objectif.montant_cible
+    ecarts = sans_double_comptage(calculer_ecarts(annee))
+    total_realise = sum((e.realise for e in ecarts), Decimal("0"))
+    total_cible = sum((e.cible for e in ecarts), Decimal("0"))
     taux_pct = float(total_realise / total_cible * 100) if total_cible else None
     return {"total_realise": total_realise, "total_cible": total_cible, "taux_pct": taux_pct}
 
@@ -141,12 +158,13 @@ def recouvrement_par_secteur(nb_mois: int = 12, annee: int | None = None):
         .annotate(nb=Count("id"), montant=Sum("montant"))
     }
     en_retard = {}
-    for a in Anomalie.objects.filter(traitee=False, brouillon=False, date_echeance__lt=date.today()):
+    for a in Anomalie.objects.filter(traitee=False, brouillon=False, date_echeance__lt=timezone.localdate()):
         en_retard[a.secteur_id] = max(en_retard.get(a.secteur_id, 0), a.jours_retard)
 
     total_general = sum(totaux.values(), Decimal("0"))
     lignes = []
-    for secteur in Secteur.objects.filter(actif=True).select_related("regisseur", "suppleant"):
+    secteurs = Secteur.objects.filter(Q(actif=True) | Q(id__in=list(totaux))).select_related("regisseur", "suppleant")
+    for secteur in secteurs:
         total = totaux.get(secteur.id, Decimal("0"))
         part = float(total / total_general * 100) if total_general else 0.0
         info = anomalies.get(secteur.id, {})

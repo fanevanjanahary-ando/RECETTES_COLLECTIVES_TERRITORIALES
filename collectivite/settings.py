@@ -1,6 +1,7 @@
 import os
+import sys
 from pathlib import Path
-
+from django.core.exceptions import ImproperlyConfigured
 import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -10,22 +11,28 @@ def _env_bool(nom, defaut):
     return os.environ.get(nom, str(defaut)).strip().lower() in ('1', 'true', 'oui', 'yes')
 
 
-SECRET_KEY = os.environ.get(
-    'DJANGO_SECRET_KEY', 'django-insecure-9_=htq=gek2k9+=&p5^@cbu(ml6e^x2xr_a3oj)#j=ezzig$uy'
-)
+DEBUG = _env_bool('DJANGO_DEBUG', not os.environ.get('DJANGO_SECRET_KEY'))
 
-DEBUG = _env_bool('DJANGO_DEBUG', True)
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', '')
+if not SECRET_KEY:
+    if DEBUG or 'test' in sys.argv:
+        SECRET_KEY = 'cle-de-developpement-locale-uniquement-' + 'x' * 40
+    else:
+        raise ImproperlyConfigured('DJANGO_SECRET_KEY doit etre definie quand DEBUG est desactive.')
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver'] + [
+ALLOWED_HOSTS = ['localhost', '127.0.0.1'] + (['testserver'] if 'test' in sys.argv else []) + [
     h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',') if h.strip()
 ]
 CSRF_TRUSTED_ORIGINS = [
     o.strip() for o in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()
 ]
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-if not DEBUG:
+if not DEBUG and 'test' not in sys.argv:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = _env_bool('DJANGO_SSL_REDIRECT', True)
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -83,7 +90,7 @@ DATABASES = {
     )
 }
 
-PASSWORD_RESET_TIMEOUT = 15 * 60
+PASSWORD_RESET_TIMEOUT = 3 * 24 * 60 * 60
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -107,7 +114,7 @@ TIME_ZONE = 'Indian/Antananarivo'
 
 USE_I18N = True
 
-USE_L10N = True
+
 
 USE_THOUSAND_SEPARATOR = False
 
@@ -137,3 +144,6 @@ else:
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'collectivite@example.com')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+LOGIN_MAX_TENTATIVES = int(os.environ.get('LOGIN_MAX_TENTATIVES', 5))
+LOGIN_VERROUILLAGE_SECONDES = int(os.environ.get('LOGIN_VERROUILLAGE_SECONDES', 900))

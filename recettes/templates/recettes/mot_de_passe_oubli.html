@@ -1,12 +1,11 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="fr"><head>
 <meta charset="utf-8">
 <meta content="width=device-width, initial-scale=1.0" name="viewport">
 <title>Mot de passe oublié · PréviRecettes</title>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
-<script>tailwind.config = { theme: { extend: { fontFamily: { inter: ['Inter','sans-serif'], pjs: ['Plus Jakarta Sans','sans-serif'] } } } };</script>
+<link href="{% static 'recettes/vendor/polices.css' %}" rel="stylesheet">
+<link href="{% static 'recettes/vendor/tailwind-forms.css' %}" rel="stylesheet">
 <style>html,body{margin:0;padding:0;}</style>
 </head>
 <body class="bg-[#EDEDED] font-inter text-[#1F2124] antialiased min-h-screen flex flex-col">

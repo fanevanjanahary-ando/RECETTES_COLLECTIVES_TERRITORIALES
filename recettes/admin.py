@@ -4,10 +4,13 @@ from .models import (
     Anomalie,
     Categorie,
     EchangeAnomalie,
+    FacteurEconomique,
+    JournalAudit,
     Notification,
     ObjectifBudgetaire,
     ParametrageSysteme,
     Profil,
+    PrevisionHistorisee,
     RapportGenere,
     Recette,
     Secteur,
@@ -70,3 +73,31 @@ admin.site.register(RapportGenere)
 class NotificationAdmin(admin.ModelAdmin):
     list_display = ("sujet", "destinataire", "type", "lue", "traitee", "envoyee_par_email", "date_creation")
     list_filter = ("type", "lue", "traitee", "envoyee_par_email")
+
+
+@admin.register(JournalAudit)
+class JournalAuditAdmin(admin.ModelAdmin):
+    list_display = ("date", "utilisateur", "action", "objet", "adresse_ip")
+    list_filter = ("action",)
+    search_fields = ("objet", "detail", "utilisateur__username")
+    readonly_fields = ("date", "utilisateur", "action", "objet", "detail", "adresse_ip")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(FacteurEconomique)
+class FacteurEconomiqueAdmin(admin.ModelAdmin):
+    list_display = ("libelle", "categorie", "mois_debut", "mois_fin", "effet_pct")
+
+
+@admin.register(PrevisionHistorisee)
+class PrevisionHistoriseeAdmin(admin.ModelAdmin):
+    list_display = ("date_calcul", "categorie", "mois", "montant_prevu", "borne_basse", "borne_haute")
+    list_filter = ("date_calcul", "categorie")

@@ -3,6 +3,7 @@ from datetime import date
 from django.conf import settings
 from django.core.mail import send_mail
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from .alertes import alertes_significatives
 from .formats import ar
@@ -31,27 +32,34 @@ def _creer_et_envoyer(utilisateur, type_notif, sujet, message, cle_unicite="", l
         return False
 
     if parametres.notifications_email_actives and utilisateur.email:
-        send_mail(
-            subject=f"[Recettes collectivité] {sujet}",
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[utilisateur.email],
-            fail_silently=True,
-        )
-        notification.envoyee_par_email = True
-        notification.save(update_fields=["envoyee_par_email"])
+        try:
+            envoyes = send_mail(
+                subject=f"[Recettes collectivité] {sujet}",
+                message=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[utilisateur.email],
+                fail_silently=False,
+            )
+        except Exception:
+            envoyes = 0
+        if envoyes:
+            notification.envoyee_par_email = True
+            notification.save(update_fields=["envoyee_par_email"])
     return True
 
 def notifier_ecarts_significatifs() -> int:
     destinataires = _destinataires([Profil.Role.ADMIN, Profil.Role.RESPONSABLE, Profil.Role.ELU])
     envoyees = 0
     for ecart in alertes_significatives():
-        cle = f"ECART-{ecart.categorie_id}-{ecart.mois:%Y-%m}"
-        sujet = f"Écart budgétaire sur « {ecart.categorie} » ({ecart.mois:%m/%Y})"
+        niveau = int(abs(ecart.ecart_pct) // 10) * 10
+        cle = f"ECART-{ecart.objectif_id}-{ecart.categorie_id}-{ecart.mois:%Y-%m}-{niveau}"
+        lieu = f" - {ecart.secteur}" if ecart.secteur else " - consolidé"
+        sujet = f"Écart budgétaire sur « {ecart.categorie} »{lieu} ({ecart.mois:%m/%Y})"
         message = (
             f"Un écart de {ecart.ecart_pct:+.1f} % a été constaté "
             f"(seuil d'alerte configuré : {ecart.seuil_pct:.1f} %).\n\n"
             f"Catégorie : {ecart.categorie}\n"
+            f"Secteur   : {ecart.secteur or 'Consolidé (tous secteurs)'}\n"
             f"Mois      : {ecart.mois:%m/%Y}\n"
             f"Objectif voté  : {ar(ecart.cible)}\n"
             f"Réalisé        : {ar(ecart.realise)}\n"
@@ -67,7 +75,7 @@ def _mois_precedent(d: date) -> date:
     return date(d.year - 1, 12, 1) if d.month == 1 else date(d.year, d.month - 1, 1)
 
 def notifier_echeances_recouvrement(aujourdhui: date | None = None) -> int:
-    aujourdhui = aujourdhui or date.today()
+    aujourdhui = aujourdhui or timezone.localdate()
     parametres = ParametrageSysteme.charger()
     if aujourdhui.day < parametres.jour_echeance_recouvrement:
         return 0
@@ -79,27 +87,40 @@ def notifier_echeances_recouvrement(aujourdhui: date | None = None) -> int:
     from .models import Categorie
 
     manquants = []
+    manquants_par_secteur = {}
     for secteur in Secteur.objects.filter(actif=True):
-        for categorie in Categorie.objects.filter(actif=True):
+        for categorie in categories:
+            habilites = {s.id for s in categorie.secteurs_habilites.all()}
+            if habilites and secteur.id not in habilites:
+                continue
             if (secteur.id, categorie.id) not in deja_saisi:
-                manquants.append(f"  - {secteur.nom} / {categorie.nom}")
+                manquants_par_secteur.setdefault(secteur.id, []).append(f"  - {secteur.nom} / {categorie.nom}")
 
-    if not manquants:
+    if not manquants_par_secteur:
         return 0
 
     cle = f"ECHEANCE-{mois_attendu:%Y-%m}"
     sujet = f"Saisie des recettes de {mois_attendu:%m/%Y} incomplète"
-    message = (
-        f"L'échéance de saisie (le {parametres.jour_echeance_recouvrement} du mois) est dépassée.\n"
-        f"{len(manquants)} couple(s) secteur / catégorie n'ont aucune recette enregistrée "
-        f"pour {mois_attendu:%m/%Y} :\n\n" + "\n".join(manquants[:40])
-    )
-    if len(manquants) > 40:
-        message += f"\n  ... et {len(manquants) - 40} autres."
-
     envoyees = 0
-    for utilisateur in _destinataires([Profil.Role.AGENT, Profil.Role.RESPONSABLE, Profil.Role.ADMIN]):
-        if _creer_et_envoyer(utilisateur, Notification.Type.ECHEANCE, sujet, message, cle, "liste_recettes"):
+    profils = Profil.objects.filter(
+        role__in=[Profil.Role.AGENT, Profil.Role.RESPONSABLE, Profil.Role.ADMIN],
+        recevoir_notifications=True, user__is_active=True,
+    ).select_related("user")
+    for profil in profils:
+        if profil.role == Profil.Role.AGENT and profil.secteur_id:
+            manquants = manquants_par_secteur.get(profil.secteur_id, [])
+        else:
+            manquants = [ligne for lignes in manquants_par_secteur.values() for ligne in lignes]
+        if not manquants:
+            continue
+        message = (
+            f"L'échéance de saisie (le {parametres.jour_echeance_recouvrement} du mois) est dépassée.\n"
+            f"{len(manquants)} couple(s) secteur / catégorie n'ont aucune recette enregistrée "
+            f"pour {mois_attendu:%m/%Y} :\n\n" + "\n".join(manquants[:40])
+        )
+        if len(manquants) > 40:
+            message += f"\n  ... et {len(manquants) - 40} autres."
+        if _creer_et_envoyer(profil.user, Notification.Type.ECHEANCE, sujet, message, cle, "liste_recettes"):
             envoyees += 1
     return envoyees
 
@@ -115,8 +136,14 @@ def notifier_anomalie(anomalie) -> int:
         f"Montant      : {ar(anomalie.montant)}\n\n"
         f"Description :\n{anomalie.description}"
     )
+    roles = [Profil.Role.ADMIN]
+    if anomalie.notifier_comptable:
+        roles.append(Profil.Role.RESPONSABLE)
+    destinataires = _destinataires(roles)
+    if anomalie.assigne_a_id and anomalie.assigne_a.is_active and anomalie.assigne_a not in destinataires:
+        destinataires.append(anomalie.assigne_a)
     envoyees = 0
-    for utilisateur in _destinataires([Profil.Role.RESPONSABLE, Profil.Role.ADMIN]):
+    for utilisateur in destinataires:
         if _creer_et_envoyer(utilisateur, Notification.Type.ANOMALIE, sujet, message, cle, f"anomalies/?dossier={anomalie.pk}"):
             envoyees += 1
     return envoyees
@@ -151,7 +178,7 @@ def notifier_relance(anomalie, auteur) -> int:
     cible = anomalie.assigne_a
     if cible is None:
         return 0
-    cle = f"RELANCE-{anomalie.pk}-{date.today():%Y%m%d}-{auteur.pk}"
+    cle = f"RELANCE-{anomalie.pk}-{timezone.localdate():%Y%m%d}-{auteur.pk}"
     sujet = f"Relance — anomalie {anomalie.reference}"
     message = (
         f"{auteur.get_full_name() or auteur.username} vous relance sur le dossier {anomalie.reference}.\n"

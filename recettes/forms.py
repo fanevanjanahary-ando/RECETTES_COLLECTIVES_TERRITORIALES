@@ -1,12 +1,13 @@
 import re
-from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
+
 
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.db.models import Sum
 from django.utils.crypto import get_random_string
 
 from .models import (
@@ -17,6 +18,7 @@ from .models import (
     Profil,
     Recette,
     Secteur,
+    FacteurEconomique,
 )
 
 EXTENSIONS_PIECES = (".pdf", ".png", ".jpg", ".jpeg", ".csv", ".xlsx", ".pes")
@@ -31,6 +33,23 @@ def valider_piece(fichier):
         raise ValidationError("Format non accepté (PDF, image, CSV, Excel ou PES uniquement).")
     if getattr(fichier, "size", 0) > TAILLE_MAX_PIECE:
         raise ValidationError("Le fichier dépasse 10 Mo.")
+    entete = fichier.read(16)
+    fichier.seek(0)
+    signatures = {
+        ".pdf": (b"%PDF",),
+        ".png": (b"\x89PNG",),
+        ".jpg": (b"\xff\xd8",),
+        ".jpeg": (b"\xff\xd8",),
+        ".xlsx": (b"PK",),
+    }
+    for extension, attendues in signatures.items():
+        if nom.endswith(extension) and not entete.startswith(attendues):
+            raise ValidationError("Le contenu du fichier ne correspond pas à son extension.")
+    if nom.endswith((".csv", ".pes")):
+        debut = fichier.read(2048).lower()
+        fichier.seek(0)
+        if b"<html" in debut or b"<script" in debut or b"\x00" in debut:
+            raise ValidationError("Le contenu du fichier ne correspond pas à son extension.")
     return fichier
 
 
@@ -39,8 +58,12 @@ class MontantField(forms.DecimalField):
 
     def to_python(self, value):
         if isinstance(value, str):
-            value = re.sub(r"[\s\u00a0\u202f]", "", value).replace(",", ".")
+            value = re.sub(r"[\s\u00a0\u202f]", "", value)
             value = re.sub(r"(?i)(ar|mga)$", "", value)
+            if "," in value:
+                value = value.replace(".", "").replace(",", ".")
+            elif value.count(".") > 1:
+                value = value.replace(".", "")
         return super().to_python(value)
 
 
@@ -60,7 +83,7 @@ class UtilisateurChoix(forms.ModelChoiceField):
 
 
 class ConnexionForm(AuthenticationForm):
-    username = forms.EmailField(label="Courriel professionnel", max_length=254)
+    username = forms.CharField(label="Courriel ou identifiant", max_length=254)
 
     def clean(self):
         identifiant = self.cleaned_data.get("username")
@@ -91,7 +114,11 @@ class FormulaireAvecUtilisateur(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["categorie"].queryset = self.categories_autorisees()
         if "secteur" in self.fields:
-            self.fields["secteur"].queryset = Secteur.objects.filter(actif=True)
+            secteurs = Secteur.objects.filter(actif=True)
+            profil = getattr(self.utilisateur, "profil", None)
+            if profil and profil.role == Profil.Role.AGENT and profil.secteur_id:
+                secteurs = secteurs.filter(pk=profil.secteur_id)
+            self.fields["secteur"].queryset = secteurs
 
     def categories_autorisees(self):
         categories = Categorie.objects.filter(actif=True)
@@ -132,12 +159,30 @@ class RecetteForm(FormulaireAvecUtilisateur):
     def clean(self):
         donnees = super().clean()
         categorie, secteur = donnees.get("categorie"), donnees.get("secteur")
+        montant, date_imputation = donnees.get("montant"), donnees.get("date_imputation")
         if categorie and secteur:
             habilites = categorie.secteurs_habilites.all()
             if habilites.exists() and secteur not in habilites:
                 self.add_error(
                     "secteur",
                     f"Le compte {categorie.libelle_complet} n'est pas habilité pour ce secteur.",
+                )
+        if (
+            categorie and secteur and montant is not None and date_imputation
+            and categorie.type_perception == Categorie.Perception.DIRECTE
+        ):
+            deja = Recette.objects.filter(
+                secteur=secteur, mois=date_imputation.replace(day=1),
+                categorie__type_perception=Categorie.Perception.DIRECTE,
+            )
+            if self.instance.pk:
+                deja = deja.exclude(pk=self.instance.pk)
+            cumul = deja.aggregate(t=Sum("montant"))["t"] or Decimal("0")
+            if cumul + montant > secteur.plafond_encaissement:
+                self.add_error(
+                    "montant",
+                    f"Le plafond d'encaissement mensuel du secteur ({secteur.plafond_encaissement:,.0f} Ar) "
+                    "serait dépassé pour les perceptions directes.".replace(",", " "),
                 )
         return donnees
 
@@ -246,16 +291,29 @@ class ParametrageForm(forms.ModelForm):
             "historique_minimum",
             "seuil_alerte_pct",
             "jour_echeance_recouvrement",
+            "saisonnalite_minimum_mois",
             "notifications_email_actives",
         ]
         widgets = {
-            "mois_a_prevoir": forms.NumberInput(attrs={"class": INPUT_CLS, "min": 1, "max": 24}),
-            "historique_minimum": forms.NumberInput(attrs={"class": INPUT_CLS, "min": 1, "max": 36}),
-            "seuil_alerte_pct": forms.NumberInput(attrs={"class": INPUT_CLS, "step": "0.5", "min": 0}),
+            "mois_a_prevoir": forms.NumberInput(attrs={"class": INPUT_CLS, "min": 1, "max": 36}),
+            "historique_minimum": forms.NumberInput(attrs={"class": INPUT_CLS, "min": 2, "max": 60}),
+            "seuil_alerte_pct": forms.NumberInput(attrs={"class": INPUT_CLS, "step": "0.5", "min": 0.01, "max": 100}),
             "jour_echeance_recouvrement": forms.NumberInput(attrs={"class": INPUT_CLS, "min": 1, "max": 28}),
             "notifications_email_actives": forms.CheckboxInput(attrs={"class": "w-4 h-4 rounded border-[#CBD5E1] text-emerald-600 focus:ring-emerald-500"}),
+            "saisonnalite_minimum_mois": forms.NumberInput(attrs={"class": INPUT_CLS, "min": 12, "max": 60}),
         }
 
+class FacteurEconomiqueForm(forms.ModelForm):
+    mois_debut = forms.DateField(label="Premier mois concerné", widget=forms.DateInput(attrs={"type": "date"}))
+    mois_fin = forms.DateField(label="Dernier mois concerné", widget=forms.DateInput(attrs={"type": "date"}))
+    categorie = forms.ModelChoiceField(
+        queryset=Categorie.objects.filter(actif=True), required=False, label="Catégorie",
+        empty_label="Toutes les catégories",
+    )
+
+    class Meta:
+        model = FacteurEconomique
+        fields = ["libelle", "categorie", "mois_debut", "mois_fin", "effet_pct"]
 
 class HabilitationForm(forms.Form):
     first_name = forms.CharField(label="Prénom", max_length=60)
@@ -286,7 +344,7 @@ class HabilitationForm(forms.Form):
     def clean_email(self):
         email = self.cleaned_data["email"].strip().lower()
         if User.objects.filter(email__iexact=email).exists() or User.objects.filter(username__iexact=email).exists():
-            raise ValidationError("Un compte utilise déjà cette adresse e-mail.")
+            raise ValidationError("Cette adresse ne peut pas être utilisée pour une nouvelle demande.")
         return email
 
     def clean_piece_nomination(self):

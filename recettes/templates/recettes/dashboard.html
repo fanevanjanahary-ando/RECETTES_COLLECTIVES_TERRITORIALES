@@ -1,4 +1,4 @@
-{% extends "recettes/base.html" %}{% load formats %}
+{% extends "recettes/base.html" %}{% load formats static %}
 {% block title %}Tableau de bord décisionnel{% endblock %}
 {% block body_class %}bg-[#F8FAFC] font-inter text-[#25272C]{% endblock %}
 {% block main_class %}w-full pt-4 px-8 pb-12{% endblock %}
@@ -43,7 +43,7 @@
 <div class="my-2">
 <div class="font-mono text-2xl font-bold text-[#131417] tracking-tight">{{ total|ariary }}</div>
 </div>
-{% if variation_n1 is not None %}<div class="flex items-center gap-1.5 text-xs text-[#047857] font-medium">
+{% if variation_n1 is not None %}<div class="flex items-center gap-1.5 text-xs {% if variation_n1 >= 0 %}text-[#047857]{% else %}text-[#DC2626]{% endif %} font-medium">
 <span class="material-symbols-outlined text-sm">{% if variation_n1 >= 0 %}arrow_upward{% else %}arrow_downward{% endif %}</span>
 <span class="font-mono">{{ variation_n1|pourcent_signe }}</span>
 <span class="text-[#CBD5E1] font-normal">vs N-1</span>
@@ -63,7 +63,7 @@
 <div class="bg-white rounded-xl p-4 border border-[#E2E8F0] shadow-xs flex flex-col justify-between hover:border-graphite-300 transition-colors">
 <span class="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wider">Écart Budgétaire</span>
 <div class="my-2">
-<div class="font-mono text-2xl font-bold text-[#DC2626] tracking-tight">{{ pire.ecart_net|ariary }}</div>
+<div class="font-mono text-2xl font-bold {% if pire and pire.ecart_pct >= 0 %}text-[#047857]{% else %}text-[#DC2626]{% endif %} tracking-tight">{{ pire.ecart_net|ariary }}</div>
 </div>
 <div class="flex items-center gap-1.5 text-xs text-[#DC2626] font-medium">
 <span class="material-symbols-outlined text-sm">warning</span>
@@ -112,8 +112,10 @@
 </div>
 {% if not data_json or data_json == "{}" %}
 <div class="m-5 px-4 py-3 rounded-lg bg-[#FFFBEB] border border-[#FDE68A] text-[#92400E] text-xs">
-Aucune donnée disponible. Lancez d'abord : <code class="font-mono">python manage.py generer_donnees_fictives</code>
+Historique insuffisant pour calculer une prévision. Saisissez des recettes sur plusieurs mois ou chargez les données de démonstration avec <code class="font-mono">python manage.py generer_donnees_fictives</code>.
 </div>
+{% elif avertissements %}
+<div class="m-5 px-4 py-3 rounded-lg bg-[#FFFBEB] border border-[#FDE68A] text-[#92400E] text-xs">{% for a in avertissements %}<p>{{ a }}</p>{% endfor %}</div>
 {% endif %}
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4" id="conteneur-graphiques"></div>
 </div>
@@ -128,7 +130,7 @@ Aucune donnée disponible. Lancez d'abord : <code class="font-mono">python manag
 </div>
 </footer></div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="{% static 'recettes/vendor/chart.umd.js' %}"></script>
 <script>
  const data = {{ data_json|safe }};
  const conteneur = document.getElementById("conteneur-graphiques");
@@ -136,10 +138,13 @@ Aucune donnée disponible. Lancez d'abord : <code class="font-mono">python manag
  Object.entries(data).forEach(([code, serie]) => {
  const col = document.createElement("div");
  col.className = "bg-white rounded-lg border border-[#F1F5F9] p-4";
- col.innerHTML = `
- <h3 class="font-pjs text-sm font-bold text-[#131417] mb-2">${serie.label}</h3>
- <canvas id="chart-${code}"></canvas>`;
- conteneur.appendChild(col);
+ const titre = document.createElement("h3");
+ titre.className = "font-pjs text-sm font-bold text-[#131417] mb-2";
+ titre.textContent = serie.label;
+ const canvas = document.createElement("canvas");
+ col.appendChild(titre);
+ col.appendChild(canvas);
+ conteneur.appendChild(col);;
 
  const labels = [...serie.mois_historique,...serie.mois_prevus];
 
@@ -148,7 +153,7 @@ Aucune donnée disponible. Lancez d'abord : <code class="font-mono">python manag
  serie.montants_historique[serie.montants_historique.length - 1],
 ...serie.montants_prevus];
 
- new Chart(document.getElementById(`chart-${code}`), {
+ new Chart(canvas, {
  type: "line",
  data: {
  labels: labels,

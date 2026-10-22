@@ -1,6 +1,6 @@
-{% extends "recettes/base.html" %}{% load formats %}
+{% extends "recettes/base.html" %}{% load formats static %}
 {% block title %}Anomalies de recouvrement{% endblock %}
-{% block tw_plugins %}{% endblock %}
+{% block tw_css %}<link href="{% static 'recettes/vendor/tailwind-base.css' %}" rel="stylesheet">{% endblock %}
 {% block body_class %}bg-[#f9f9fb] font-inter text-[#191c1e]{% endblock %}
 {% block main_class %}p-8 max-w-7xl mx-auto w-full flex flex-col gap-6{% endblock %}
 {% block content %}
@@ -69,7 +69,7 @@
 </div>
 <form class="flex items-center gap-2 text-xs text-[#64748b]" method="get">{% if archives %}<input type="hidden" name="archives" value="1">{% endif %}
 <span class="">Filtrer :</span>
-<select class="bg-transparent font-medium text-[#191c1e] focus:outline-none cursor-pointer" name="secteur" onchange="this.form.submit"><option value="">Tous les secteurs</option>{% for s in secteurs %}<option value="{{ s.pk }}"{% if secteur_filtre == s.pk|stringformat:"s" %} selected{% endif %}>{{ s.nom }}</option>{% endfor %}</select>
+<select class="bg-transparent font-medium text-[#191c1e] focus:outline-none cursor-pointer" name="secteur" onchange="this.form.submit()"><option value="">Tous les secteurs</option>{% for s in secteurs %}<option value="{{ s.pk }}"{% if secteur_filtre == s.pk|stringformat:"s" %} selected{% endif %}>{{ s.nom }}</option>{% endfor %}</select>
 </form>
 </div>
 <div class="divide-y divide-[#eaedf1]">{% if brouillons %}<div class="px-5 py-2.5 text-xs text-[#64748b] border-b border-[#eaedf1] bg-[#f9f9fb]">Mes brouillons : {% for b in brouillons %}<a class="font-semibold text-[#191c1e] underline mr-2" href="{% url 'modifier_anomalie' b.pk %}">#{{ b.reference }}</a>{% endfor %}</div>{% endif %}{% for a in anomalies %}<div class="{% if selection and selection.pk == a.pk %}p-5 hover:bg-[#f9f9fb]/50 transition-colors bg-[#f9f9fb]/30 cursor-pointer border-l-4 border-rose-500 flex flex-col gap-3{% else %}p-5 hover:bg-[#f9f9fb]/50 transition-colors cursor-pointer border-l-4 border-transparent flex flex-col gap-3{% endif %}">

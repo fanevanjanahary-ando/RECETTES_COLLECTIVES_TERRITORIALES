@@ -1,6 +1,6 @@
-{% extends "recettes/base.html" %}{% load formats %}
+{% extends "recettes/base.html" %}{% load formats static %}
 {% block title %}Journal des recettes{% endblock %}
-{% block tw_plugins %}{% endblock %}
+{% block tw_css %}<link href="{% static 'recettes/vendor/tailwind-base.css' %}" rel="stylesheet">{% endblock %}
 {% block body_class %}bg-[#f9f9fb] font-inter text-[#191c1e]{% endblock %}
 {% block main_class %}p-8 max-w-7xl mx-auto w-full flex flex-col gap-6{% endblock %}
 {% block content %}
@@ -32,15 +32,15 @@
 <div class="flex flex-wrap items-center gap-3">
 <div class="flex items-center gap-2 bg-[#f9f9fb] border border-[#eaedf1] px-3 py-1.5 rounded-lg text-xs">
 <span class="text-[#64748b]">Période :</span>
-<select class="bg-transparent font-medium text-[#191c1e] focus:outline-none cursor-pointer" name="periode" onchange="this.form.submit">{% for v,l in periodes %}<option value="{{ v }}"{% if v == periode %} selected{% endif %}>{{ l }}</option>{% endfor %}<option value="toutes"{% if periode == "toutes" %} selected{% endif %}>Toutes périodes</option></select>
+<select class="bg-transparent font-medium text-[#191c1e] focus:outline-none cursor-pointer" name="periode" onchange="this.form.submit()">{% for v,l in periodes %}<option value="{{ v }}"{% if v == periode %} selected{% endif %}>{{ l }}</option>{% endfor %}<option value="toutes"{% if periode == "toutes" %} selected{% endif %}>Toutes périodes</option></select>
 </div>
 <div class="flex items-center gap-2 bg-[#f9f9fb] border border-[#eaedf1] px-3 py-1.5 rounded-lg text-xs">
 <span class="text-[#64748b]">Secteur :</span>
-<select class="bg-transparent font-medium text-[#191c1e] focus:outline-none cursor-pointer" name="secteur" onchange="this.form.submit"><option value="">Tous les secteurs ({{ secteurs|length }})</option>{% for s in secteurs %}<option value="{{ s.pk }}"{% if secteur_filtre == s.pk|stringformat:"s" %} selected{% endif %}>{{ s.nom }}</option>{% endfor %}</select>
+<select class="bg-transparent font-medium text-[#191c1e] focus:outline-none cursor-pointer" name="secteur" onchange="this.form.submit()"><option value="">Tous les secteurs ({{ secteurs|length }})</option>{% for s in secteurs %}<option value="{{ s.pk }}"{% if secteur_filtre == s.pk|stringformat:"s" %} selected{% endif %}>{{ s.nom }}</option>{% endfor %}</select>
 </div>
 <div class="flex items-center gap-2 bg-[#f9f9fb] border border-[#eaedf1] px-3 py-1.5 rounded-lg text-xs">
 <span class="text-[#64748b]">Nature comptable :</span>
-<select class="bg-transparent font-medium text-[#191c1e] focus:outline-none cursor-pointer" name="chapitre" onchange="this.form.submit"><option value="">Toutes les catégories</option>{% for c,l in chapitres %}<option value="{{ c }}"{% if chapitre_filtre == c %} selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+<select class="bg-transparent font-medium text-[#191c1e] focus:outline-none cursor-pointer" name="chapitre" onchange="this.form.submit()"><option value="">Toutes les catégories</option>{% for c,l in chapitres %}<option value="{{ c }}"{% if chapitre_filtre == c %} selected{% endif %}>{{ l }}</option>{% endfor %}</select>
 </div>
 </div>
 <div class="text-xs text-[#64748b]"><strong class="text-[#191c1e]">{{ page.object_list|length }} écritures</strong> affichées sur {{ page.paginator.count }} • Total sélection : <strong class="text-[#191c1e] font-mono">{{ total_selection|ariary }}</strong></div>

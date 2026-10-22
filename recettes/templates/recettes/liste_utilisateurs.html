@@ -332,11 +332,11 @@
 {% endblock %}
 {% block scripts %}
 <script>
- (function{
+ (function(){
  var ov=document.getElementById('drawerOverlay'), ct=document.getElementById('drawerContent');
  var f=document.getElementById('inviteAgentForm'), arb=document.getElementById('arb-form');
- function show{ ov.classList.remove('hidden'); setTimeout(function{ct.classList.remove('translate-x-full')},10); }
- window.closeDrawer=function{ ct.classList.add('translate-x-full'); setTimeout(function{ov.classList.add('hidden')},220); };
+ function show(){ ov.classList.remove('hidden'); setTimeout(function(){ct.classList.remove('translate-x-full')},10); }
+ window.closeDrawer=function(){ ct.classList.add('translate-x-full'); setTimeout(function(){ov.classList.add('hidden')},220); };
  window.openDrawer=function(btn){
  var d=btn&&btn.dataset&&btn.dataset.pk?btn.dataset:null;
  var v=function(id,val){document.getElementById(id).value=val||'';};
@@ -349,21 +349,21 @@
  document.getElementById('submitInviteBtn').lastElementChild.textContent = d ? 'Enregistrer' : "Envoyer l'invitation";
  var box=document.getElementById('arbitrage-box');
  if(d&&d.attente==='1'){ box.classList.remove('hidden'); document.getElementById('arb-ref').textContent=d.ref; arb.action='/utilisateurs/'+d.pk+'/arbitrer/'; } else { box.classList.add('hidden'); }
- show;
+ show();
  };
- var ob=document.getElementById('openDrawerBtn'); if(ob) ob.addEventListener('click',function{ window.openDrawer(null); });
+ var ob=document.getElementById('openDrawerBtn'); if(ob) ob.addEventListener('click',function(){ window.openDrawer(null); });
  ['closeDrawerBtn','cancelDrawerBtn'].forEach(function(id){ var b=document.getElementById(id); if(b) b.addEventListener('click',window.closeDrawer); });
- ov.addEventListener('click',function(e){ if(e.target===ov) window.closeDrawer; });
+ ov.addEventListener('click',function(e){ if(e.target===ov) window.closeDrawer(); });
  var q=document.getElementById('searchInput'), rf=document.getElementById('roleFilter'), sf=document.getElementById('sectorFilter'), rc=document.getElementById('resultCount');
- function apply{
- var n=0, t=(q.value||'').toLowerCase;
+ function apply(){
+ var n=0, t=(q.value||'').toLowerCase();
  document.querySelectorAll('#agentTableBody tr').forEach(function(r){
- var ok=(rf.value==='ALL'||r.dataset.role===rf.value)&&(sf.value==='ALL'||r.dataset.sector===sf.value)&&(!t||r.innerText.toLowerCase.indexOf(t)>-1);
+ var ok=(rf.value==='ALL'||r.dataset.role===rf.value)&&(sf.value==='ALL'||r.dataset.sector===sf.value)&&(!t||r.innerText.toLowerCase().indexOf(t)>-1);
  r.style.display=ok?'':'none'; if(ok) n++;
  });
  rc.textContent=n+' agent'+(n>1?'s':'')+' répertorié'+(n>1?'s':'');
  }
  [q,rf,sf].forEach(function(e){ e.addEventListener('input',apply); e.addEventListener('change',apply); });
- });
+ })();
 </script>
 {% endblock %}

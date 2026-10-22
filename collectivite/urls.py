@@ -1,8 +1,8 @@
-from django.conf import settings
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import path, reverse_lazy
 
+from recettes import api
 from recettes import views as v
 
 urlpatterns = [
@@ -71,6 +71,15 @@ urlpatterns = [
     path('utilisateurs/<int:pk>/arbitrer/', v.arbitrer_utilisateur, name='arbitrer_utilisateur'),
     path('utilisateurs/<int:pk>/cle/', v.cle_utilisateur, name='cle_utilisateur'),
     path('parametrage/', v.parametrage, name='parametrage'),
+
+    path('facteurs/', v.liste_facteurs, name='liste_facteurs'),
+    path('facteurs/<int:pk>/supprimer/', v.supprimer_facteur, name='supprimer_facteur'),
+
+    path('api/referentiels/', api.api_referentiels, name='api_referentiels'),
+    path('api/recettes/', api.api_recettes, name='api_recettes'),
+    path('api/previsions/', api.api_previsions, name='api_previsions'),
+    path('api/ecarts/', api.api_ecarts, name='api_ecarts'),
+    path('api/secteurs/', api.api_secteurs, name='api_secteurs'),
 
     path('rapports/', v.rapports, name='rapports'),
     path('rapports/<int:pk>/telecharger/', v.telecharger_rapport, name='telecharger_rapport'),

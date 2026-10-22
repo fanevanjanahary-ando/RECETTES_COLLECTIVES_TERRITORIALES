@@ -7,4 +7,5 @@ from .models import Profil
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def creer_profil(sender, instance, created, **kwargs):
     if created:
-        Profil.objects.get_or_create(user=instance)
+        role = Profil.Role.ADMIN if instance.is_superuser else Profil.Role.AGENT
+        Profil.objects.get_or_create(user=instance, defaults={"role": role})

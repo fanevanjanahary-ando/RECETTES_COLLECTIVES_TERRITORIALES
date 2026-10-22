@@ -1,11 +1,13 @@
+import tempfile
 from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.core import mail
+from django.core.files.base import ContentFile
 from django.core.exceptions import ValidationError
 from django.db.utils import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .alertes import calculer_ecarts, recouvrement_par_secteur
@@ -114,7 +116,7 @@ class Point10_ComptesDemoAvecEmail(TestCase):
     def test_les_comptes_de_demo_ont_une_adresse(self):
         from django.core.management import call_command
 
-        call_command("generer_donnees_fictives", "--mois", "4", verbosity=0)
+        call_command("generer_donnees_fictives", "--mois", "4", "--force", verbosity=0)
         for username in ("admin_demo", "responsable_demo", "elu_demo", "agent_demo"):
             utilisateur = User.objects.get(username=username)
             self.assertTrue(utilisateur.email, f"{username} n'a pas d'adresse e-mail")
@@ -170,6 +172,7 @@ class Point4_ModeleConfigurable(BaseDonnees):
             {
                 "mois_a_prevoir": 12,
                 "historique_minimum": 4,
+                "saisonnalite_minimum_mois": 24,
                 "seuil_alerte_pct": "5.00",
                 "jour_echeance_recouvrement": 15,
                 "notifications_email_actives": "on",
@@ -266,7 +269,7 @@ class Point8_DistinctionPrevuObjectif(BaseDonnees):
         ObjectifBudgetaire.objects.create(categorie=self.taxes, mois=date(2026, 1, 1), montant_cible=Decimal("2000"))
         self.client.force_login(self.responsable)
         contenu = self.client.get(reverse("dashboard")).content.decode()
-        self.assertIn("Projection", contenu)
+        self.assertIn("projection", contenu)
         self.assertIn("Objectif voté", contenu)
 
     def test_la_page_budget_confronte_les_deux_notions(self):
@@ -326,10 +329,9 @@ class ConnexionParEmail(BaseDonnees):
         )
         self.assertEqual(reponse.status_code, 302)
 
-    def test_connexion_avec_identifiant_refusee(self):
+    def test_connexion_avec_identifiant_acceptee(self):
         reponse = self.client.post(reverse("connexion"), {"username": "respo", "password": "MotDePasse!2026"})
-        self.assertEqual(reponse.status_code, 200)
-        self.assertFalse(reponse.wsgi_request.user.is_authenticated)
+        self.assertEqual(reponse.status_code, 302)
 
 
 class DemandeHabilitation(TestCase):
@@ -423,3 +425,227 @@ class AnomaliesDeRecouvrement(BaseDonnees):
         reponse = self.client.post(reverse("traiter_anomalie", args=[anomalie.pk]))
         anomalie.refresh_from_db()
         self.assertTrue(anomalie.traitee)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class Cloisonnement(BaseDonnees):
+
+    def setUp(self):
+        super().setUp()
+        self.agent.profil.secteur = self.nord
+        self.agent.profil.save()
+        self.recette_nord = Recette.objects.create(
+            categorie=self.taxes, secteur=self.nord, mois=date(2026, 1, 1),
+            date_imputation=date(2026, 1, 5), montant=Decimal("1000"),
+        )
+        self.recette_sud = Recette.objects.create(
+            categorie=self.taxes, secteur=self.sud, mois=date(2026, 1, 1),
+            date_imputation=date(2026, 1, 6), montant=Decimal("2000"),
+        )
+        for recette in (self.recette_nord, self.recette_sud):
+            recette.piece_jointe.save("bordereau.pdf", ContentFile(b"%PDF-1.4"), save=True)
+
+    def test_la_liste_est_limitee_au_secteur_de_l_agent(self):
+        self.client.force_login(self.agent)
+        reponse = self.client.get(reverse("liste_recettes"))
+        self.assertContains(reponse, self.recette_nord.reference)
+        self.assertNotContains(reponse, self.recette_sud.reference)
+
+    def test_le_detail_et_le_bordereau_d_un_autre_secteur_sont_refuses(self):
+        self.client.force_login(self.agent)
+        self.assertEqual(self.client.get(reverse("detail_recette", args=[self.recette_sud.pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse("bordereau", args=[self.recette_sud.pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse("bordereau", args=[self.recette_nord.pk])).status_code, 200)
+
+    def test_la_saisie_pour_un_autre_secteur_est_refusee(self):
+        self.client.force_login(self.agent)
+        reponse = self.client.post(
+            reverse("ajouter_recette"),
+            {
+                "categorie": self.taxes.pk, "secteur": self.sud.pk, "date_imputation": "2026-02-05",
+                "montant": "1000.00", "mode_reglement": "VIREMENT", "libelle": "Intrus",
+            },
+        )
+        self.assertEqual(reponse.status_code, 200)
+        self.assertFalse(Recette.objects.filter(libelle="Intrus").exists())
+
+    def test_l_export_de_l_agent_est_limite_a_son_secteur(self):
+        self.client.force_login(self.agent)
+        reponse = self.client.get(reverse("export_csv", args=["recettes"]))
+        contenu = reponse.content.decode("utf-8-sig")
+        self.assertIn(self.recette_nord.reference, contenu)
+        self.assertNotIn(self.recette_sud.reference, contenu)
+
+    def test_l_elu_n_ouvre_pas_les_bordereaux(self):
+        elu = User.objects.create_user("elu", "elu@example.test", "MotDePasse!2026")
+        elu.profil.role = Profil.Role.ELU
+        elu.profil.save()
+        self.client.force_login(elu)
+        self.assertNotEqual(self.client.get(reverse("bordereau", args=[self.recette_nord.pk])).status_code, 200)
+
+    def test_parametres_d_url_non_numeriques_ne_provoquent_pas_d_erreur(self):
+        self.client.force_login(self.responsable)
+        for url in (
+            "/recettes/?secteur=abc", "/recettes/?categorie=abc",
+            "/anomalies/?secteur=abc", "/anomalies/?dossier=abc",
+        ):
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+
+    def test_un_brouillon_d_autrui_reste_invisible(self):
+        brouillon = Anomalie.objects.create(
+            secteur=self.nord, categorie=self.taxes, mois=date(2026, 1, 1), montant=Decimal("500"),
+            brouillon=True, signale_par=self.agent, description="Secret",
+        )
+        self.client.force_login(self.responsable)
+        reponse = self.client.get(f"/anomalies/?dossier={brouillon.pk}")
+        self.assertNotContains(reponse, "Secret")
+
+
+class GardeFousComptes(BaseDonnees):
+
+    def test_refuser_un_compte_actif_n_est_pas_possible(self):
+        self.client.force_login(self.admin)
+        self.client.post(reverse("arbitrer_utilisateur", args=[self.agent.pk]), {"decision": "refuser"})
+        self.assertTrue(User.objects.filter(pk=self.agent.pk).exists())
+
+    def test_l_admin_ne_peut_pas_se_retrograder(self):
+        self.client.force_login(self.admin)
+        self.client.post(
+            reverse("modifier_utilisateur", args=[self.admin.pk]),
+            {
+                "first_name": "A", "last_name": "B", "email": "admin@example.test",
+                "role": Profil.Role.AGENT, "is_active": "on",
+            },
+        )
+        self.admin.profil.refresh_from_db()
+        self.assertEqual(self.admin.profil.role, Profil.Role.ADMIN)
+
+    def test_le_dernier_admin_ne_peut_pas_etre_desactive(self):
+        autre = User.objects.create_user("admin2", "admin2@example.test", "MotDePasse!2026")
+        autre.profil.role = Profil.Role.ADMIN
+        autre.profil.save()
+        self.client.force_login(autre)
+        self.client.post(reverse("basculer_utilisateur", args=[self.admin.pk]))
+        self.client.force_login(self.admin)
+        self.client.post(reverse("basculer_utilisateur", args=[autre.pk]))
+        self.assertTrue(User.objects.get(pk=autre.pk).is_active)
+
+
+class ConnexionLimitee(BaseDonnees):
+
+    def test_apres_plusieurs_echecs_la_connexion_est_bloquee(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        for _ in range(5):
+            self.client.post(reverse("connexion"), {"username": "respo", "password": "faux"})
+        reponse = self.client.post(
+            reverse("connexion"), {"username": "respo", "password": "MotDePasse!2026"}
+        )
+        self.assertEqual(reponse.status_code, 200)
+        self.assertNotIn("_auth_user_id", self.client.session)
+        cache.clear()
+
+
+class DoubleComptageObjectifs(BaseDonnees):
+
+    def test_un_objectif_de_secteur_ne_double_pas_le_realise(self):
+        from .alertes import execution_budgetaire
+
+        mois = date(2026, 1, 1)
+        Recette.objects.create(categorie=self.taxes, secteur=self.nord, mois=mois, montant=Decimal("1000"))
+        ObjectifBudgetaire.objects.create(categorie=self.taxes, mois=mois, montant_cible=Decimal("2000"))
+        avant = execution_budgetaire(2026)
+        ObjectifBudgetaire.objects.create(
+            categorie=self.taxes, mois=mois, secteur=self.nord, montant_cible=Decimal("900")
+        )
+        apres = execution_budgetaire(2026)
+        self.assertEqual(avant["total_cible"], apres["total_cible"])
+        self.assertEqual(avant["total_realise"], apres["total_realise"])
+
+    def test_plusieurs_types_de_budget_sont_possibles_pour_un_meme_mois(self):
+        mois = date(2026, 1, 1)
+        ObjectifBudgetaire.objects.create(
+            categorie=self.taxes, mois=mois, montant_cible=Decimal("2000"),
+            type_budget=ObjectifBudgetaire.TypeBudget.BP,
+        )
+        ObjectifBudgetaire.objects.create(
+            categorie=self.taxes, mois=mois, montant_cible=Decimal("500"),
+            type_budget=ObjectifBudgetaire.TypeBudget.DM,
+        )
+
+
+class PrevisionCalendrier(BaseDonnees):
+
+    def test_les_mois_manquants_decalent_la_tendance(self):
+        from .prevision import _modele
+
+        mois = [
+            date(2025, 1, 1), date(2025, 2, 1), date(2025, 3, 1),
+            date(2025, 6, 1), date(2025, 7, 1),
+        ]
+        _, montants, bas, haut, saisonnalite = _modele(mois, [100, 110, 120, 130, 140], 2)
+        self.assertEqual(montants, [145.07, 151.04])
+        self.assertFalse(saisonnalite)
+        self.assertTrue(all(b <= m <= h for b, m, h in zip(bas, montants, haut)))
+
+    def test_un_facteur_economique_modifie_la_prevision(self):
+        from .models import FacteurEconomique
+
+        for i in range(6):
+            Recette.objects.create(
+                categorie=self.taxes, secteur=self.nord, mois=date(2025, 1 + i, 1),
+                montant=Decimal(1000 + 10 * i),
+            )
+        base = previsions_par_categorie(
+            mois_a_prevoir=1, historique_minimum=3
+        )[str(self.taxes.pk)]["montants_prevus"][0]
+        FacteurEconomique.objects.create(
+            libelle="Hausse", mois_debut=date(2025, 7, 1), mois_fin=date(2025, 7, 1),
+            effet_pct=Decimal("10"),
+        )
+        apres = previsions_par_categorie(
+            mois_a_prevoir=1, historique_minimum=3
+        )[str(self.taxes.pk)]["montants_prevus"][0]
+        self.assertAlmostEqual(apres, round(base * 1.1, 2), places=1)
+
+
+class PlafondEtFichiers(BaseDonnees):
+
+    def test_le_plafond_d_encaissement_est_controle(self):
+        self.taxes.type_perception = Categorie.Perception.DIRECTE
+        self.taxes.save()
+        self.nord.plafond_encaissement = Decimal("1000")
+        self.nord.save()
+        self.client.force_login(self.responsable)
+        reponse = self.client.post(
+            reverse("ajouter_recette"),
+            {
+                "categorie": self.taxes.pk, "secteur": self.nord.pk, "date_imputation": "2026-02-05",
+                "montant": "5000.00", "mode_reglement": "ESPECES", "libelle": "Trop",
+            },
+        )
+        self.assertEqual(reponse.status_code, 200)
+        self.assertFalse(Recette.objects.filter(libelle="Trop").exists())
+
+    def test_un_faux_pdf_est_refuse(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from .forms import valider_piece
+
+        with self.assertRaises(ValidationError):
+            valider_piece(SimpleUploadedFile("faux.pdf", b"<html><script>x</script></html>"))
+        valider_piece(SimpleUploadedFile("vrai.pdf", b"%PDF-1.4 contenu"))
+
+
+class ModifierRecetteFormulaire(BaseDonnees):
+
+    def test_le_montant_est_prerempli_avec_un_point_et_les_boutons_existent(self):
+        recette = Recette.objects.create(
+            categorie=self.taxes, secteur=self.nord, mois=date(2026, 1, 1),
+            date_imputation=date(2026, 1, 5), montant=Decimal("3457250.00"),
+        )
+        self.client.force_login(self.responsable)
+        reponse = self.client.get(reverse("modifier_recette", args=[recette.pk]))
+        self.assertContains(reponse, 'value="3457250.00"')
+        detail = self.client.get(reverse("detail_recette", args=[recette.pk]))
+        self.assertContains(detail, reverse("supprimer_recette", args=[recette.pk]))

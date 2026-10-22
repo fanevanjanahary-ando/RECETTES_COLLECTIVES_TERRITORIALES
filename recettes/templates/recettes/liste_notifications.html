@@ -27,12 +27,12 @@
 {% endblock %}
 {% block scripts %}
 <script>
- (function{
+ (function(){
  var tabs=document.querySelectorAll('.filter-tab');
  var on='filter-tab px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#25272C] text-white shadow-sm shrink-0';
  var off='filter-tab px-3 py-1.5 rounded-lg text-xs font-medium text-[#64748B] hover:bg-slate-100 hover:text-[#25272C] shrink-0 transition-colors';
  tabs.forEach(function(tab){
- tab.addEventListener('click',function{
+ tab.addEventListener('click',function(){
  tabs.forEach(function(t){ t.className=off; }); this.className=on;
  var f=this.dataset.filter;
  document.querySelectorAll('.notification-item').forEach(function(n){
@@ -42,6 +42,6 @@
  });
  });
  });
- });
+ })();
 </script>
 {% endblock %}

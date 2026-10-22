@@ -22,7 +22,7 @@
 
 <div class="flex items-center gap-2.5 shrink-0">
 <a class="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 shadow-sm transition-all" href='{% url "export_csv" "categories" %}'>
-<span class="material-symbols-outlined text-[16px] text-slate-500">file_download</span>
+<span class="material-symbols-outlined text-[16px] text-slate-500">download</span>
 <span class="">Exporter la nomenclature</span>
 </a>
 <button class="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 shadow-sm shadow-emerald-600/20 transition-all" id="btn-create-category" type="button">
@@ -205,7 +205,7 @@
 </div>
 <p class="text-xs text-slate-500 mt-0.5">Fiche de paramétrage budgétaire et comptable</p>
 </div>
-<button class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors" id="btn-reset-view" onclick="resetDrawer" type="button">
+<button class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors" id="btn-reset-view" onclick="resetDrawer()" type="button">
 <span class="material-symbols-outlined text-[18px]">close</span>
 </button>
 </div>
@@ -296,7 +296,7 @@
 {% block scripts %}
 <script>
  var ANNEE = {{ annee }};
- function fmtAr(n){ return Math.round(n).toString.replace(/\B(?=(\d{3})+(?!\d))/g,'\u202f')+' Ar'; }
+ function fmtAr(n){ return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'\u202f')+' Ar'; }
  function toggleAccordion(id, iconId){
  var c=document.getElementById(id), i=document.getElementById(iconId);
  if(c.classList.contains('hidden')){c.classList.remove('hidden');i.classList.remove('rotate-180');}
@@ -323,14 +323,14 @@
  fill({code:d.code,label:d.label,chapter:d.chapter,flux:d.flux,tva:d.tva,agents:d.agents==='1',revision:d.revision==='1',actif:d.actif==='1',hab:d.hab,total:parseFloat(d.total),prev:parseFloat(d.prev)});
  var t=document.getElementById('btn-toggle'); t.classList.remove('hidden'); t.formAction='/categories/'+d.pk+'/basculer/';
  t.querySelector('span:last-child').textContent = d.actif==='1' ? 'Désactiver ce compte' : 'Réactiver ce compte';
- var dr=document.getElementById('editor-drawer'); dr.classList.add('ring-2','ring-emerald-500/30'); setTimeout(function{dr.classList.remove('ring-2','ring-emerald-500/30')},500);
+ var dr=document.getElementById('editor-drawer'); dr.classList.add('ring-2','ring-emerald-500/30'); setTimeout(function(){dr.classList.remove('ring-2','ring-emerald-500/30')},500);
  }
- function resetDrawer{ newCategory; }
- function newCategory{
+ function resetDrawer(){ newCategory(); }
+ function newCategory(){
  document.getElementById('drawer-title').innerText='Nouvelle catégorie';
  document.getElementById('category-form').action='{% url "ajouter_categorie" %}';
  fill({}); document.getElementById('btn-toggle').classList.add('hidden');
- document.getElementById('input-label').focus;
+ document.getElementById('input-label').focus();
  }
  document.getElementById('btn-create-category').addEventListener('click', newCategory);
  document.getElementById('chapter-filter').addEventListener('change', function(e){
@@ -338,17 +338,17 @@
  document.querySelectorAll('#chapters-container > div').forEach(function(a){ a.style.display=(v==='all'||a.getAttribute('data-chapter')===v)?'':'none'; });
  });
  document.getElementById('nomenclature-filter').addEventListener('input', function(e){
- var q=e.target.value.toLowerCase;
- document.querySelectorAll('#chapters-container [onclick^="selectRow"]').forEach(function(r){ r.style.display=r.innerText.toLowerCase.indexOf(q)>-1?'':'none'; });
+ var q=e.target.value.toLowerCase();
+ document.querySelectorAll('#chapters-container [onclick^="selectRow"]').forEach(function(r){ r.style.display=r.innerText.toLowerCase().indexOf(q)>-1?'':'none'; });
  });
- (function{
+ (function(){
  var bs=document.querySelectorAll('button');
  bs.forEach(function(b){
- var t=b.textContent.trim;
- if(t==='Synthèse'){ b.addEventListener('click',function{ document.querySelectorAll('[id^="acc-"]').forEach(function(x){x.classList.add('hidden')}); document.querySelectorAll('[id^="icon-"]').forEach(function(x){x.classList.add('rotate-180')}); }); }
- if(t==='Détaillée'){ b.addEventListener('click',function{ document.querySelectorAll('[id^="acc-"]').forEach(function(x){x.classList.remove('hidden')}); document.querySelectorAll('[id^="icon-"]').forEach(function(x){x.classList.remove('rotate-180')}); }); }
+ var t=b.textContent.trim();
+ if(t==='Synthèse'){ b.addEventListener('click',function(){ document.querySelectorAll('[id^="acc-"]').forEach(function(x){x.classList.add('hidden')}); document.querySelectorAll('[id^="icon-"]').forEach(function(x){x.classList.add('rotate-180')}); }); }
+ if(t==='Détaillée'){ b.addEventListener('click',function(){ document.querySelectorAll('[id^="acc-"]').forEach(function(x){x.classList.remove('hidden')}); document.querySelectorAll('[id^="icon-"]').forEach(function(x){x.classList.remove('rotate-180')}); }); }
  });
- });
- newCategory;
+ })();
+ newCategory();
 </script>
 {% endblock %}

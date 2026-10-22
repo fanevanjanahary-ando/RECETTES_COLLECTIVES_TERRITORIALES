@@ -45,3 +45,8 @@ Copiez `.env.example` vers `.env`, puis remplacez `EMAIL_HOST_PASSWORD` par un m
 
 ## Documentation
 Voir `docs/DOCUMENTATION_TECHNIQUE.md`, `docs/API.md`, `docs/MANUEL_UTILISATEUR.md`, `docs/UML.md` et le projet de rapport `docs/RAPPORT_MEMOIRE.md`.
+
+
+
+## made by
+RAKOTONDRAMANANA Andomanankasina Fanevanjanahary

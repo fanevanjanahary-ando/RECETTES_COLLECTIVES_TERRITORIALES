@@ -48,5 +48,5 @@ Voir `docs/DOCUMENTATION_TECHNIQUE.md`, `docs/API.md`, `docs/MANUEL_UTILISATEUR.
 
 
 
-## made by
+## Made by
 RAKOTONDRAMANANA Andomanankasina Fanevanjanahary

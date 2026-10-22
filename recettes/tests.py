@@ -139,6 +139,19 @@ class Point10_ComptesDemoAvecEmail(TestCase):
 
 class Point3_NotificationsReelles(BaseDonnees):
 
+    def test_curseur_seuil_affiche_un_remplissage_selon_la_valeur(self):
+        self.client.force_login(self.responsable)
+
+        reponse = self.client.get(reverse("liste_notifications"))
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, 'style="--range-progress: 40%"')
+        self.assertContains(reponse, 'min="5"')
+        self.assertContains(reponse, 'max="30"')
+        self.assertContains(reponse, 'value="15"')
+        self.assertContains(reponse, 'class="threshold-range"')
+        self.assertContains(reponse, 'disabled="disabled"')
+
     def test_un_ecart_significatif_declenche_un_email_et_une_notification(self):
         Recette.objects.create(categorie=self.taxes, secteur=self.nord, mois=date(2026, 1, 1), montant=Decimal("1000"))
         ObjectifBudgetaire.objects.create(categorie=self.taxes, mois=date(2026, 1, 1), montant_cible=Decimal("2000"))

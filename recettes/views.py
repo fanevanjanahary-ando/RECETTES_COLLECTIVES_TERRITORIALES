@@ -1091,6 +1091,19 @@ def liste_notifications(request):
     delai_h = (sum(delais) / len(delais) / 3600) if delais else None
     a_traiter = [n for n in notifications if not n.traitee]
     parametres = ParametrageSysteme.charger()
+    seuil_min_affiche = 5
+    seuil_max_affiche = 30
+    progression_seuil = round(
+        max(
+            0,
+            min(
+                100,
+                (float(parametres.seuil_alerte_pct) - seuil_min_affiche)
+                / (seuil_max_affiche - seuil_min_affiche)
+                * 100,
+            ),
+        )
+    )
     destinataires = Profil.objects.filter(
         role__in=[Profil.Role.RESPONSABLE, Profil.Role.ADMIN, Profil.Role.ELU],
         recevoir_notifications=True, user__is_active=True,
@@ -1105,6 +1118,9 @@ def liste_notifications(request):
             "nb_traitees_mois": len(traitees),
             "delai_h": delai_h,
             "parametres": parametres,
+            "seuil_min_affiche": seuil_min_affiche,
+            "seuil_max_affiche": seuil_max_affiche,
+            "progression_seuil": progression_seuil,
             "destinataires": destinataires,
             "peut_declencher": request.user.profil.role in ROLES_GESTION,
         },

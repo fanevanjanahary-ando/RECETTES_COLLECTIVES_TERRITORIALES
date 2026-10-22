@@ -1,13 +1,17 @@
 from datetime import date
+import logging
+import smtplib
 
 from django.conf import settings
 from django.core.mail import send_mail
-from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from .alertes import alertes_significatives
 from .formats import ar
 from .models import Notification, ParametrageSysteme, Profil, Recette, Secteur
+
+logger = logging.getLogger(__name__)
+
 
 def _destinataires(roles) -> list:
     profils = (
@@ -18,20 +22,25 @@ def _destinataires(roles) -> list:
 
 def _creer_et_envoyer(utilisateur, type_notif, sujet, message, cle_unicite="", lien="") -> bool:
     parametres = ParametrageSysteme.charger()
-    try:
-        with transaction.atomic():
-            notification = Notification.objects.create(
-                destinataire=utilisateur,
-                type=type_notif,
-                sujet=sujet,
-                message=message,
-                cle_unicite=cle_unicite,
-                lien=lien,
-            )
-    except IntegrityError:
-        return False
+    defaults = {
+        "type": type_notif,
+        "sujet": sujet,
+        "message": message,
+        "lien": lien,
+    }
+    if cle_unicite:
+        notification, creee = Notification.objects.get_or_create(
+            destinataire=utilisateur,
+            cle_unicite=cle_unicite,
+            defaults=defaults,
+        )
+    else:
+        notification = Notification.objects.create(
+            destinataire=utilisateur, cle_unicite="", **defaults
+        )
+        creee = True
 
-    if parametres.notifications_email_actives and utilisateur.email:
+    if parametres.notifications_email_actives and utilisateur.email and not notification.envoyee_par_email:
         try:
             envoyes = send_mail(
                 subject=f"[Recettes collectivité] {sujet}",
@@ -40,12 +49,23 @@ def _creer_et_envoyer(utilisateur, type_notif, sujet, message, cle_unicite="", l
                 recipient_list=[utilisateur.email],
                 fail_silently=False,
             )
-        except Exception:
-            envoyes = 0
-        if envoyes:
+        except (OSError, smtplib.SMTPException):
+            logger.exception(
+                "Échec de l'envoi par e-mail de la notification %s à %s",
+                notification.pk,
+                utilisateur.email,
+            )
+            return creee
+        if not envoyes:
+            logger.error(
+                "Le backend n'a pas envoyé l'e-mail de la notification %s à %s",
+                notification.pk,
+                utilisateur.email,
+            )
+        else:
             notification.envoyee_par_email = True
             notification.save(update_fields=["envoyee_par_email"])
-    return True
+    return creee
 
 def notifier_ecarts_significatifs() -> int:
     destinataires = _destinataires([Profil.Role.ADMIN, Profil.Role.RESPONSABLE, Profil.Role.ELU])
@@ -88,6 +108,7 @@ def notifier_echeances_recouvrement(aujourdhui: date | None = None) -> int:
 
     manquants = []
     manquants_par_secteur = {}
+    categories = Categorie.objects.filter(actif=True).prefetch_related("secteurs_habilites")
     for secteur in Secteur.objects.filter(actif=True):
         for categorie in categories:
             habilites = {s.id for s in categorie.secteurs_habilites.all()}
@@ -107,8 +128,8 @@ def notifier_echeances_recouvrement(aujourdhui: date | None = None) -> int:
         recevoir_notifications=True, user__is_active=True,
     ).select_related("user")
     for profil in profils:
-        if profil.role == Profil.Role.AGENT and profil.secteur_id:
-            manquants = manquants_par_secteur.get(profil.secteur_id, [])
+        if profil.role == Profil.Role.AGENT:
+            manquants = manquants_par_secteur.get(profil.secteur_id, []) if profil.secteur_id else []
         else:
             manquants = [ligne for lignes in manquants_par_secteur.values() for ligne in lignes]
         if not manquants:

@@ -23,7 +23,7 @@ def _indice_mois(d: date) -> int:
 
 def historique_mensuel_par_categorie(secteur_id=None) -> dict:
     qs = Recette.objects.all()
-    if secteur_id:
+    if secteur_id is not None:
         qs = qs.filter(secteur_id=secteur_id)
     lignes = (
         qs.values("categorie_id", "categorie__nom", "mois")

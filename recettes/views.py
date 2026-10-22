@@ -1,5 +1,7 @@
 import hashlib
 import json
+import logging
+import smtplib
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -11,8 +13,8 @@ from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView, LogoutView
 from django.core.mail import EmailMessage
 from django.core.paginator import Paginator
-from django.core.cache import cache
 from django.core.files.base import ContentFile
+from django.db import transaction
 from django.db.models import Q, Sum
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -58,6 +60,7 @@ from .models import (
     RapportGenere,
     Recette,
     Secteur,
+    TentativeConnexion,
 )
 from .notifications import (
     notifier_anomalie,
@@ -86,6 +89,7 @@ ROLES_ANOMALIES = (Profil.Role.AGENT, *ROLES_GESTION)
 MOIS_LABELS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août",
                "septembre", "octobre", "novembre", "décembre"]
 LIBELLE_CHAPITRE = dict(CHAPITRES)
+logger = logging.getLogger(__name__)
 
 
 def _chiffres(valeur):
@@ -135,7 +139,12 @@ class ConnexionView(LoginView):
 
     def post(self, request, *args, **kwargs):
         identifiant = request.POST.get("username", "")
-        if cache.get(self._cle(identifiant), 0) >= settings.LOGIN_MAX_TENTATIVES:
+        cle = self._cle(identifiant)
+        seuil = timezone.now() - timedelta(seconds=settings.LOGIN_VERROUILLAGE_SECONDES)
+        tentatives = TentativeConnexion.objects.filter(
+            pk=cle, date_modification__gte=seuil
+        ).values_list("nombre", flat=True).first() or 0
+        if tentatives >= settings.LOGIN_MAX_TENTATIVES:
             journaliser(request, "connexion_bloquee", identifiant)
             messages.error(
                 request,
@@ -153,7 +162,9 @@ class ConnexionView(LoginView):
         return ctx
 
     def form_valid(self, form):
-        cache.delete(self._cle(self.request.POST.get("username", "")))
+        TentativeConnexion.objects.filter(
+            pk=self._cle(self.request.POST.get("username", ""))
+        ).delete()
         reponse = super().form_valid(form)
         journaliser(self.request, "connexion", self.request.user.username)
         try:
@@ -171,7 +182,18 @@ class ConnexionView(LoginView):
     def form_invalid(self, form):
         identifiant = self.request.POST.get("username", "")
         cle = self._cle(identifiant)
-        cache.set(cle, cache.get(cle, 0) + 1, settings.LOGIN_VERROUILLAGE_SECONDES)
+        maintenant = timezone.now()
+        seuil = maintenant - timedelta(seconds=settings.LOGIN_VERROUILLAGE_SECONDES)
+        with transaction.atomic():
+            tentative, creee = TentativeConnexion.objects.select_for_update().get_or_create(
+                pk=cle, defaults={"nombre": 1}
+            )
+            if not creee:
+                if tentative.date_modification < seuil:
+                    tentative.nombre = 0
+                tentative.nombre += 1
+                tentative.save(update_fields=["nombre", "date_modification"])
+            TentativeConnexion.objects.filter(date_modification__lt=seuil).delete()
         journaliser(self.request, "connexion_echec", identifiant)
         return super().form_invalid(form)
 
@@ -210,26 +232,31 @@ def changer_exercice(request):
 @login_required
 def dashboard(request):
     annee = exercice_courant(request)
+    secteur_id = secteur_impose(request.user)
     parametres = ParametrageSysteme.charger()
-    recettes_annee = Recette.objects.filter(mois__year=annee)
+    recettes_annee = recettes_visibles(request.user).filter(mois__year=annee)
     total = _somme(recettes_annee)
     dernier_mois = recettes_annee.order_by("-mois").values_list("mois", flat=True).first()
     if dernier_mois:
-        precedent = _somme(Recette.objects.filter(mois__year=annee - 1, mois__month__lte=dernier_mois.month))
+        precedent = _somme(
+            recettes_visibles(request.user).filter(mois__year=annee - 1, mois__month__lte=dernier_mois.month)
+        )
     else:
         precedent = Decimal("0")
-    execution = execution_budgetaire(annee)
-    ecarts = calculer_ecarts(annee)
+    execution = execution_budgetaire(annee, secteur_id)
+    ecarts = calculer_ecarts(annee, secteur_id)
     alertes = [e for e in ecarts if e.significatif]
     pire = alertes[0] if alertes else (ecarts[0] if ecarts else None)
 
-    suivi = recouvrement_par_secteur(annee=annee)
+    suivi = recouvrement_par_secteur(annee=annee, secteur_id=secteur_id)
     for ligne in suivi["lignes"]:
         ligne["statut"] = "À surveiller" if ligne["anomalies_ouvertes"] else "Conforme"
     anomalies_ouvertes = Anomalie.objects.filter(traitee=False, brouillon=False)
+    if secteur_id is not None:
+        anomalies_ouvertes = anomalies_ouvertes.filter(secteur_id=secteur_id)
     montant_anomalies = _somme(anomalies_ouvertes, "montant")
 
-    previsions = previsions_par_categorie()
+    previsions = previsions_par_categorie(secteur_id=secteur_id)
 
     return render(
         request,
@@ -252,8 +279,9 @@ def dashboard(request):
     )
 
 
-def _periodes(annee):
-    dernier = Recette.objects.filter(mois__year=annee).order_by("-mois").values_list("mois", flat=True).first()
+def _periodes(annee, utilisateur=None):
+    recettes = recettes_visibles(utilisateur) if utilisateur is not None else Recette.objects.all()
+    dernier = recettes.filter(mois__year=annee).order_by("-mois").values_list("mois", flat=True).first()
     options = []
     if dernier:
         for i in range(0, 6):
@@ -267,10 +295,10 @@ def _periodes(annee):
 @login_required
 def liste_recettes(request):
     annee = exercice_courant(request)
-    periodes = _periodes(annee)
+    periodes = _periodes(annee, request.user)
     periode = request.GET.get("periode") or periodes[0][0]
     impose = secteur_impose(request.user)
-    secteur_id = str(impose) if impose else _chiffres(request.GET.get("secteur"))
+    secteur_id = str(impose) if impose is not None else _chiffres(request.GET.get("secteur"))
     chapitre = request.GET.get("chapitre") if request.GET.get("chapitre") in dict(CHAPITRES) else ""
     categorie_id = _chiffres(request.GET.get("categorie"))
     q = (request.GET.get("q") or "").strip()
@@ -322,7 +350,7 @@ def liste_recettes(request):
             "nb_total": recettes_visibles(request.user).count(),
             "periodes": periodes,
             "periode": periode,
-            "secteurs": Secteur.objects.filter(actif=True, pk=impose) if impose else Secteur.objects.filter(actif=True),
+            "secteurs": Secteur.objects.filter(actif=True, pk=impose) if impose is not None else Secteur.objects.filter(actif=True),
             "chapitres": [(c, LIBELLE_CHAPITRE[c]) for c, _ in CHAPITRES if Categorie.objects.filter(chapitre=c).exists()],
             "secteur_filtre": secteur_id,
             "chapitre_filtre": chapitre,
@@ -334,16 +362,21 @@ def liste_recettes(request):
     )
 
 
-def _impact_data(annee):
+def _impact_data(annee, secteur_id=None):
     """Objectif annuel et réalisé par compte, pour l'encart « Impact sur l'exercice » du formulaire."""
     objectifs = {
         l["categorie_id"]: l["t"]
-        for l in ObjectifBudgetaire.objects.filter(mois__year=annee, statut="INSCRIT", secteur__isnull=True)
+        for l in ObjectifBudgetaire.objects.filter(
+            mois__year=annee, statut="INSCRIT", secteur_id=secteur_id
+        )
         .values("categorie_id").annotate(t=Sum("montant_cible"))
     }
+    recettes = Recette.objects.filter(mois__year=annee)
+    if secteur_id is not None:
+        recettes = recettes.filter(secteur_id=secteur_id)
     realise = {
         l["categorie_id"]: l["t"]
-        for l in Recette.objects.filter(mois__year=annee).values("categorie_id").annotate(t=Sum("montant"))
+        for l in recettes.values("categorie_id").annotate(t=Sum("montant"))
     }
     return {
         str(c.pk): {
@@ -357,14 +390,15 @@ def _impact_data(annee):
 
 def _contexte_formulaire_recette(request, form, titre, recette=None, lecture=False):
     annee = exercice_courant(request)
+    secteur_id = secteur_impose(request.user)
     return {
         "form": form,
         "titre": titre,
         "recette": recette,
         "lecture": lecture,
-        "impact_json": _json_sur(_impact_data(annee)),
+        "impact_json": _json_sur(_impact_data(annee, secteur_id)),
         "annee": annee,
-        "dernieres": Recette.objects.select_related("categorie", "secteur").order_by("-date_saisie")[:3],
+        "dernieres": recettes_visibles(request.user).select_related("categorie", "secteur").order_by("-date_saisie")[:3],
         "aujourdhui": timezone.localdate().isoformat(),
     }
 
@@ -610,7 +644,7 @@ def modifier_secteur(request, pk):
     return redirect("gestion_secteurs")
 
 
-@login_required
+@role_requis(*ROLES_BUDGET)
 def suivi_secteurs(request):
     annee = exercice_courant(request)
     suivi = recouvrement_par_secteur(annee=annee)
@@ -894,7 +928,7 @@ def _part_recettes_propres(donnees):
 @role_requis(*ROLES_ANOMALIES)
 def liste_anomalies(request):
     impose = secteur_impose(request.user)
-    secteur_id = str(impose) if impose else _chiffres(request.GET.get("secteur"))
+    secteur_id = str(impose) if impose is not None else _chiffres(request.GET.get("secteur"))
     visibles = anomalies_visibles(request.user)
     relations = ("categorie", "secteur", "signale_par", "assigne_a")
     if request.GET.get("archives"):
@@ -923,7 +957,7 @@ def liste_anomalies(request):
             "anomalies": liste,
             "selection": selection,
             "echanges": selection.echanges.select_related("auteur") if selection else [],
-            "secteurs": Secteur.objects.filter(actif=True, pk=impose) if impose else Secteur.objects.filter(actif=True),
+            "secteurs": Secteur.objects.filter(actif=True, pk=impose) if impose is not None else Secteur.objects.filter(actif=True),
             "secteur_filtre": secteur_id,
             "archives": bool(request.GET.get("archives")),
             "nb_ouvertes": ouvertes.count(),
@@ -1141,13 +1175,17 @@ def _envoyer_lien_mot_de_passe(request, utilisateur):
         return False
     formulaire = PasswordResetForm({"email": utilisateur.email})
     if formulaire.is_valid():
-        formulaire.save(
-            request=request,
-            subject_template_name="recettes/email/mot_de_passe_sujet.txt",
-            email_template_name="recettes/email/mot_de_passe_corps.txt",
-            from_email=None,
-            use_https=request.is_secure(),
-        )
+        try:
+            formulaire.save(
+                request=request,
+                subject_template_name="recettes/email/mot_de_passe_sujet.txt",
+                email_template_name="recettes/email/mot_de_passe_corps.txt",
+                from_email=None,
+                use_https=request.is_secure(),
+            )
+        except (OSError, smtplib.SMTPException):
+            logger.exception("Échec de l'envoi du lien de mot de passe à %s", utilisateur.email)
+            return False
         return True
     return False
 
@@ -1159,10 +1197,14 @@ def inviter_utilisateur(request):
     if form.is_valid():
         user = form.save()
         envoye = _envoyer_lien_mot_de_passe(request, user)
-        messages.success(
-            request,
-            f"Invitation créée pour {user.email}." + (" Un lien de création de mot de passe a été envoyé." if envoye else ""),
-        )
+        if envoye:
+            messages.success(request, f"Invitation créée pour {user.email}. Un lien de création de mot de passe a été envoyé.")
+        else:
+            messages.error(
+                request,
+                f"Invitation créée pour {user.email}, mais l'envoi du lien a échoué. "
+                "Vous pouvez réessayer depuis la gestion des utilisateurs.",
+            )
     else:
         _erreurs_en_messages(request, form)
     return redirect("liste_utilisateurs")
@@ -1366,7 +1408,7 @@ def rapports(request):
                 ("recettes", "Recettes (CSV)"), ("objectifs", "Objectifs budgétaires (CSV)"),
                 ("ecarts", "Écarts (CSV)"), ("previsions", "Prévisions (CSV)"),
                 ("exercices", "Comparaison des exercices (CSV)"), ("secteurs", "Recouvrement par secteur (CSV)"),
-                ("anomalies", "Anomalies (CSV)"),
+                ("anomalies", "Anomalies (CSV)"), ("categories", "Catégories (CSV)"),
             ]],
         },
     )

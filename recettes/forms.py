@@ -116,8 +116,8 @@ class FormulaireAvecUtilisateur(forms.ModelForm):
         if "secteur" in self.fields:
             secteurs = Secteur.objects.filter(actif=True)
             profil = getattr(self.utilisateur, "profil", None)
-            if profil and profil.role == Profil.Role.AGENT and profil.secteur_id:
-                secteurs = secteurs.filter(pk=profil.secteur_id)
+            if profil and profil.role == Profil.Role.AGENT:
+                secteurs = secteurs.filter(pk=profil.secteur_id) if profil.secteur_id else secteurs.none()
             self.fields["secteur"].queryset = secteurs
 
     def categories_autorisees(self):

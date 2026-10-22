@@ -30,7 +30,7 @@ def export_recettes_csv(annee=None, secteur_id=None) -> HttpResponse:
     qs = Recette.objects.select_related("categorie", "secteur", "saisie_par").order_by("mois", "id")
     if annee:
         qs = qs.filter(mois__year=annee)
-    if secteur_id:
+    if secteur_id is not None:
         qs = qs.filter(secteur_id=secteur_id)
     lignes = [
         [
@@ -57,7 +57,7 @@ def export_objectifs_csv(annee=None, secteur_id=None) -> HttpResponse:
     qs = ObjectifBudgetaire.objects.select_related("categorie", "secteur", "fixe_par").order_by("mois", "categorie")
     if annee:
         qs = qs.filter(mois__year=annee)
-    if secteur_id:
+    if secteur_id is not None:
         qs = qs.filter(secteur_id=secteur_id)
     lignes = [
         [o.mois.strftime("%Y-%m"), o.categorie.nom, o.secteur.nom if o.secteur else "Consolidé",
@@ -78,7 +78,7 @@ def export_ecarts_csv(annee=None, secteur_id=None) -> HttpResponse:
             _nombre(e.ecart_pct), "OUI" if e.significatif else "non",
         ]
         for e in calculer_ecarts(annee)
-        if not secteur_id or e.secteur_id == secteur_id
+        if secteur_id is None or e.secteur_id == secteur_id
     ]
     return _reponse_csv(
         "ecarts_budgetaires.csv",
@@ -133,7 +133,7 @@ def export_anomalies_csv(annee=None, secteur_id=None) -> HttpResponse:
     from .models import Anomalie
 
     qs = Anomalie.objects.select_related("secteur", "categorie").filter(brouillon=False)
-    if secteur_id:
+    if secteur_id is not None:
         qs = qs.filter(secteur_id=secteur_id)
     lignes = [
         [a.reference, a.secteur.nom, a.categorie.libelle_complet, a.get_motif_display(), _nombre(a.montant),

@@ -168,6 +168,16 @@ class JournalAudit(models.Model):
         return f"{self.date:%d/%m/%Y %H:%M} {self.action} {self.objet}"
 
 
+class TentativeConnexion(models.Model):
+    cle = models.CharField(max_length=64, primary_key=True)
+    nombre = models.PositiveSmallIntegerField(default=0)
+    date_modification = models.DateTimeField(auto_now=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Compteur de tentatives de connexion"
+        verbose_name_plural = "Compteurs de tentatives de connexion"
+
+
 class PrevisionHistorisee(models.Model):
 
     categorie = models.ForeignKey("Categorie", on_delete=models.CASCADE, related_name="previsions_historisees")

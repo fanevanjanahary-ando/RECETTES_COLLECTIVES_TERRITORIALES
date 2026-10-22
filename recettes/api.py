@@ -44,7 +44,7 @@ def api_recettes(request):
     qs = recettes_visibles(request.user).filter(mois__year=annee).select_related("categorie", "secteur")
     secteur_id = _entier(request.GET.get("secteur"))
     categorie_id = _entier(request.GET.get("categorie"))
-    if secteur_id:
+    if secteur_id is not None:
         qs = qs.filter(secteur_id=secteur_id)
     if categorie_id:
         qs = qs.filter(categorie_id=categorie_id)
@@ -119,7 +119,7 @@ def api_referentiels(request):
     from .models import Categorie
 
     impose = secteur_impose(request.user)
-    secteurs = Secteur.objects.filter(actif=True, pk=impose) if impose else Secteur.objects.filter(actif=True)
+    secteurs = Secteur.objects.filter(actif=True, pk=impose) if impose is not None else Secteur.objects.filter(actif=True)
     return JsonResponse({
         "exercices": annees_disponibles(),
         "secteurs": [{"id": s.pk, "nom": s.nom, "code": s.code} for s in secteurs],

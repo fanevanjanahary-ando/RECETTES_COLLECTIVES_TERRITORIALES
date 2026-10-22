@@ -9,3 +9,5 @@ def creer_profil(sender, instance, created, **kwargs):
     if created:
         role = Profil.Role.ADMIN if instance.is_superuser else Profil.Role.AGENT
         Profil.objects.get_or_create(user=instance, defaults={"role": role})
+    elif instance.is_superuser:
+        Profil.objects.filter(user=instance).exclude(role=Profil.Role.ADMIN).update(role=Profil.Role.ADMIN)

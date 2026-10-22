@@ -132,15 +132,20 @@ MEDIA_ROOT = Path(os.environ.get('DJANGO_MEDIA_ROOT', BASE_DIR / 'media'))
 DATA_UPLOAD_MAX_MEMORY_SIZE = 12 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND')
 if os.environ.get('EMAIL_HOST'):
-    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_BACKEND = EMAIL_BACKEND or 'django.core.mail.backends.smtp.EmailBackend'
     EMAIL_HOST = os.environ['EMAIL_HOST']
     EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
     EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
     EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
     EMAIL_USE_TLS = _env_bool('EMAIL_USE_TLS', True)
-else:
+elif not EMAIL_BACKEND and (DEBUG or 'test' in sys.argv):
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+elif not EMAIL_BACKEND:
+    raise ImproperlyConfigured(
+        'Configurez EMAIL_HOST ou EMAIL_BACKEND pour activer les e-mails hors mode DEBUG.'
+    )
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'collectivite@example.com')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

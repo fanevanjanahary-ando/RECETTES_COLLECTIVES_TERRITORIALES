@@ -35,22 +35,31 @@ class Ecart:
         return self.realise - self.cible
 
 
-def realise_par_categorie_mois() -> dict:
+def realise_par_categorie_mois(secteur_id=None) -> dict:
+    recettes = Recette.objects.all()
+    if secteur_id is not None:
+        recettes = recettes.filter(secteur_id=secteur_id)
     return {
         (ligne["categorie_id"], ligne["mois"]): ligne["total"]
-        for ligne in Recette.objects.values("categorie_id", "mois").annotate(total=Sum("montant"))
+        for ligne in recettes.values("categorie_id", "mois").annotate(total=Sum("montant"))
     }
 
 
-def realise_par_categorie_mois_secteur() -> dict:
+def realise_par_categorie_mois_secteur(secteur_id=None) -> dict:
+    recettes = Recette.objects.all()
+    if secteur_id is not None:
+        recettes = recettes.filter(secteur_id=secteur_id)
     return {
         (ligne["categorie_id"], ligne["mois"], ligne["secteur_id"]): ligne["total"]
-        for ligne in Recette.objects.values("categorie_id", "mois", "secteur_id").annotate(total=Sum("montant"))
+        for ligne in recettes.values("categorie_id", "mois", "secteur_id").annotate(total=Sum("montant"))
     }
 
 
-def _objectifs_inscrits():
-    return ObjectifBudgetaire.objects.filter(statut=ObjectifBudgetaire.Statut.INSCRIT).select_related(
+def _objectifs_inscrits(secteur_id=None):
+    objectifs = ObjectifBudgetaire.objects.filter(statut=ObjectifBudgetaire.Statut.INSCRIT)
+    if secteur_id is not None:
+        objectifs = objectifs.filter(secteur_id=secteur_id)
+    return objectifs.select_related(
         "categorie", "secteur"
     )
 
@@ -68,8 +77,8 @@ def _realise_ou_zero(objectif, par_cat, par_cat_secteur):
             return Decimal("0")
     return realise
 
-def _objectifs_agreges(annee: int | None = None):
-    objectifs = _objectifs_inscrits().order_by("pk")
+def _objectifs_agreges(annee: int | None = None, secteur_id=None):
+    objectifs = _objectifs_inscrits(secteur_id).order_by("pk")
     if annee:
         objectifs = objectifs.filter(mois__year=annee)
     groupes = {}
@@ -87,13 +96,13 @@ def sans_double_comptage(ecarts):
     return [e for e in ecarts if not e.secteur_id or (e.categorie_id, e.mois) not in consolides]
 
 
-def calculer_ecarts(annee: int | None = None):
+def calculer_ecarts(annee: int | None = None, secteur_id=None):
     seuil_pct = float(ParametrageSysteme.charger().seuil_alerte_pct)
-    par_cat = realise_par_categorie_mois()
-    par_cat_secteur = realise_par_categorie_mois_secteur()
+    par_cat = realise_par_categorie_mois(secteur_id)
+    par_cat_secteur = realise_par_categorie_mois_secteur(secteur_id)
 
     ecarts = []
-    for groupe in _objectifs_agreges(annee):
+    for groupe in _objectifs_agreges(annee, secteur_id):
         objectif, cible = groupe["objectif"], groupe["cible"]
         realise = _realise_ou_zero(objectif, par_cat, par_cat_secteur)
         if realise is None or cible == 0:
@@ -122,8 +131,8 @@ def alertes_significatives(annee: int | None = None):
     return [e for e in calculer_ecarts(annee) if e.significatif]
 
 
-def execution_budgetaire(annee: int | None = None):
-    ecarts = sans_double_comptage(calculer_ecarts(annee))
+def execution_budgetaire(annee: int | None = None, secteur_id=None):
+    ecarts = sans_double_comptage(calculer_ecarts(annee, secteur_id))
     total_realise = sum((e.realise for e in ecarts), Decimal("0"))
     total_cible = sum((e.cible for e in ecarts), Decimal("0"))
     taux_pct = float(total_realise / total_cible * 100) if total_cible else None
@@ -135,8 +144,10 @@ def _mois_moins(d: date, n: int) -> date:
     return date(total // 12, total % 12 + 1, 1)
 
 
-def recouvrement_par_secteur(nb_mois: int = 12, annee: int | None = None):
+def recouvrement_par_secteur(nb_mois: int = 12, annee: int | None = None, secteur_id=None):
     qs = Recette.objects.all()
+    if secteur_id is not None:
+        qs = qs.filter(secteur_id=secteur_id)
     if annee:
         qs = qs.filter(mois__year=annee)
     dernier = qs.order_by("-mois").values_list("mois", flat=True).first()
@@ -147,23 +158,30 @@ def recouvrement_par_secteur(nb_mois: int = 12, annee: int | None = None):
 
     totaux = {
         ligne["secteur_id"]: ligne["total"]
-        for ligne in Recette.objects.filter(mois__gte=mois_debut, mois__lte=dernier)
+        for ligne in qs.filter(mois__gte=mois_debut, mois__lte=dernier)
         .values("secteur_id")
         .annotate(total=Sum("montant"))
     }
+    anomalies_qs = Anomalie.objects.filter(traitee=False, brouillon=False)
+    en_retard_qs = Anomalie.objects.filter(traitee=False, brouillon=False, date_echeance__lt=timezone.localdate())
+    if secteur_id is not None:
+        anomalies_qs = anomalies_qs.filter(secteur_id=secteur_id)
+        en_retard_qs = en_retard_qs.filter(secteur_id=secteur_id)
     anomalies = {
         ligne["secteur_id"]: ligne
-        for ligne in Anomalie.objects.filter(traitee=False, brouillon=False)
+        for ligne in anomalies_qs
         .values("secteur_id")
         .annotate(nb=Count("id"), montant=Sum("montant"))
     }
     en_retard = {}
-    for a in Anomalie.objects.filter(traitee=False, brouillon=False, date_echeance__lt=timezone.localdate()):
+    for a in en_retard_qs:
         en_retard[a.secteur_id] = max(en_retard.get(a.secteur_id, 0), a.jours_retard)
 
     total_general = sum(totaux.values(), Decimal("0"))
     lignes = []
     secteurs = Secteur.objects.filter(Q(actif=True) | Q(id__in=list(totaux))).select_related("regisseur", "suppleant")
+    if secteur_id is not None:
+        secteurs = secteurs.filter(pk=secteur_id)
     for secteur in secteurs:
         total = totaux.get(secteur.id, Decimal("0"))
         part = float(total / total_general * 100) if total_general else 0.0

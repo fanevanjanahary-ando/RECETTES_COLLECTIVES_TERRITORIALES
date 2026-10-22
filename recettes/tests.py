@@ -1,8 +1,11 @@
+import smtplib
 import tempfile
 from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.contrib.messages import get_messages
 from django.core import mail
 from django.core.files.base import ContentFile
 from django.core.exceptions import ValidationError
@@ -20,8 +23,13 @@ from .models import (
     Profil,
     Recette,
     Secteur,
+    TentativeConnexion,
 )
-from .notifications import notifier_ecarts_significatifs
+from .notifications import (
+    _creer_et_envoyer,
+    notifier_ecarts_significatifs,
+    notifier_echeances_recouvrement,
+)
 from .prevision import previsions_par_categorie
 from .rapports import comparaison_exercices
 
@@ -34,6 +42,7 @@ class BaseDonnees(TestCase):
 
         self.agent = User.objects.create_user("agent", "agent@example.test", "MotDePasse!2026")
         self.agent.profil.role = Profil.Role.AGENT
+        self.agent.profil.secteur = self.nord
         self.agent.profil.save()
 
         self.responsable = User.objects.create_user("respo", "respo@example.test", "MotDePasse!2026")
@@ -250,7 +259,7 @@ class Point7_ExportTableur(BaseDonnees):
 
     def test_tous_les_exports_repondent(self):
         self.client.force_login(self.responsable)
-        for jeu in ("recettes", "objectifs", "ecarts", "previsions", "exercices", "secteurs"):
+        for jeu in ("recettes", "objectifs", "ecarts", "previsions", "exercices", "secteurs", "categories"):
             with self.subTest(jeu=jeu):
                 self.assertEqual(self.client.get(reverse("export_csv", args=[jeu])).status_code, 200)
 
@@ -260,7 +269,9 @@ class Point7_ExportTableur(BaseDonnees):
 
     def test_page_rapports_accessible_au_responsable(self):
         self.client.force_login(self.responsable)
-        self.assertEqual(self.client.get(reverse("rapports")).status_code, 200)
+        reponse = self.client.get(reverse("rapports"))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertIn(("categories", "Catégories (CSV)"), reponse.context["exports"])
 
 class Point8_DistinctionPrevuObjectif(BaseDonnees):
 
@@ -476,6 +487,60 @@ class Cloisonnement(BaseDonnees):
         self.assertIn(self.recette_nord.reference, contenu)
         self.assertNotIn(self.recette_sud.reference, contenu)
 
+    def test_un_agent_sans_secteur_ne_voit_aucune_donnee_ni_secteur(self):
+        self.agent.profil.secteur = None
+        self.agent.profil.save()
+        self.client.force_login(self.agent)
+
+        reponse = self.client.get(reverse("liste_recettes"))
+        self.assertEqual(reponse.context["total_selection"], Decimal("0"))
+        self.assertEqual(reponse.context["secteurs"].count(), 0)
+
+        export = self.client.get(reverse("export_csv", args=["recettes"]))
+        contenu = export.content.decode("utf-8-sig")
+        self.assertNotIn(self.recette_nord.reference, contenu)
+        self.assertNotIn(self.recette_sud.reference, contenu)
+
+        referentiels = self.client.get(reverse("api_referentiels")).json()
+        self.assertEqual(referentiels["secteurs"], [])
+
+    def test_le_dashboard_agent_est_limite_a_son_secteur(self):
+        Recette.objects.create(
+            categorie=self.taxes, secteur=self.nord, mois=date(2026, 2, 1), montant=Decimal("1000")
+        )
+        Recette.objects.create(
+            categorie=self.taxes, secteur=self.sud, mois=date(2026, 2, 1), montant=Decimal("9000")
+        )
+        ObjectifBudgetaire.objects.create(
+            categorie=self.taxes, secteur=None, mois=date(2026, 2, 1), montant_cible=Decimal("50000")
+        )
+        ObjectifBudgetaire.objects.create(
+            categorie=self.taxes, secteur=self.nord, mois=date(2026, 2, 1), montant_cible=Decimal("1200")
+        )
+        Anomalie.objects.create(
+            categorie=self.taxes, secteur=self.sud, mois=date(2026, 2, 1), montant=Decimal("500"),
+            description="Dossier du secteur Sud.",
+        )
+        self.client.force_login(self.agent)
+
+        reponse = self.client.get(reverse("dashboard"))
+        self.assertEqual(reponse.context["total"], Decimal("2000"))
+        self.assertEqual(reponse.context["execution"]["total_cible"], Decimal("1200"))
+        self.assertEqual(reponse.context["anomalies_ouvertes_total"], 0)
+        self.assertEqual(
+            [ligne["secteur"].pk for ligne in reponse.context["suivi_secteurs"]["lignes"]],
+            [self.nord.pk],
+        )
+
+    def test_le_suivi_global_est_reserve_aux_roles_budgetaires(self):
+        self.client.force_login(self.agent)
+        self.assertEqual(self.client.get(reverse("suivi_secteurs")).status_code, 302)
+        dashboard = self.client.get(reverse("dashboard"))
+        self.assertNotContains(dashboard, "Secteurs &amp; Recouvrement")
+
+        self.client.force_login(self.responsable)
+        self.assertEqual(self.client.get(reverse("suivi_secteurs")).status_code, 200)
+
     def test_l_elu_n_ouvre_pas_les_bordereaux(self):
         elu = User.objects.create_user("elu", "elu@example.test", "MotDePasse!2026")
         elu.profil.role = Profil.Role.ELU
@@ -499,6 +564,63 @@ class Cloisonnement(BaseDonnees):
         self.client.force_login(self.responsable)
         reponse = self.client.get(f"/anomalies/?dossier={brouillon.pk}")
         self.assertNotContains(reponse, "Secret")
+
+
+class CorrectionsAudit(BaseDonnees):
+
+    def test_le_rappel_d_echeance_charge_les_categories_actives(self):
+        nombre = notifier_echeances_recouvrement(date(2026, 3, 10))
+        self.assertGreater(nombre, 0)
+        self.assertTrue(Notification.objects.filter(type=Notification.Type.ECHEANCE).exists())
+
+    def test_la_promotion_en_superutilisateur_met_a_jour_le_profil(self):
+        utilisateur = User.objects.create_user("super", "super@example.test", "MotDePasse!2026")
+        utilisateur.is_superuser = True
+        utilisateur.save(update_fields=["is_superuser"])
+        utilisateur.profil.refresh_from_db()
+        self.assertEqual(utilisateur.profil.role, Profil.Role.ADMIN)
+
+    def test_echec_envoi_invitation_est_signale_sans_annuler_le_compte(self):
+        self.client.force_login(self.admin)
+        with patch("recettes.views.PasswordResetForm.save", side_effect=OSError("SMTP indisponible")):
+            reponse = self.client.post(
+                reverse("inviter_utilisateur"),
+                {
+                    "first_name": "Nouvel",
+                    "last_name": "Agent",
+                    "email": "nouvel.agent@example.test",
+                    "role": Profil.Role.AGENT,
+                },
+                follow=True,
+            )
+
+        self.assertTrue(User.objects.filter(email="nouvel.agent@example.test").exists())
+        messages_text = [str(message) for message in get_messages(reponse.wsgi_request)]
+        self.assertTrue(any("mais l'envoi du lien a échoué" in message for message in messages_text))
+
+    def test_un_email_de_notification_en_echec_peut_etre_reessaye(self):
+        with patch("recettes.notifications.send_mail", side_effect=smtplib.SMTPException("SMTP indisponible")):
+            with self.assertLogs("recettes.notifications", level="ERROR"):
+                self.assertTrue(
+                    _creer_et_envoyer(
+                        self.admin, Notification.Type.SYSTEME, "Test", "Message", "TEST-RETRY"
+                    )
+                )
+
+        notification = Notification.objects.get(cle_unicite="TEST-RETRY")
+        self.assertFalse(notification.envoyee_par_email)
+
+        with patch("recettes.notifications.send_mail", return_value=1) as send_mail:
+            self.assertFalse(
+                _creer_et_envoyer(
+                    self.admin, Notification.Type.SYSTEME, "Test", "Message", "TEST-RETRY"
+                )
+            )
+
+        notification.refresh_from_db()
+        self.assertTrue(notification.envoyee_par_email)
+        self.assertEqual(Notification.objects.filter(cle_unicite="TEST-RETRY").count(), 1)
+        send_mail.assert_called_once()
 
 
 class GardeFousComptes(BaseDonnees):
@@ -534,17 +656,15 @@ class GardeFousComptes(BaseDonnees):
 class ConnexionLimitee(BaseDonnees):
 
     def test_apres_plusieurs_echecs_la_connexion_est_bloquee(self):
-        from django.core.cache import cache
-
-        cache.clear()
         for _ in range(5):
             self.client.post(reverse("connexion"), {"username": "respo", "password": "faux"})
+        self.assertEqual(TentativeConnexion.objects.count(), 1)
+        self.assertEqual(TentativeConnexion.objects.get().nombre, 5)
         reponse = self.client.post(
             reverse("connexion"), {"username": "respo", "password": "MotDePasse!2026"}
         )
         self.assertEqual(reponse.status_code, 200)
         self.assertNotIn("_auth_user_id", self.client.session)
-        cache.clear()
 
 
 class DoubleComptageObjectifs(BaseDonnees):

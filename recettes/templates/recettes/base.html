@@ -69,8 +69,8 @@
 <nav class="flex flex-col px-3 pt-4 gap-1.5">
 {% include "recettes/_nav_item.html" with url="dashboard" icon="dashboard" label="Tableau de bord" actifs="dashboard" %}
 {% include "recettes/_nav_item.html" with url="liste_recettes" icon="receipt_long" label="Recettes & Saisies" actifs="liste_recettes ajouter_recette detail_recette modifier_recette supprimer_recette" %}
-{% include "recettes/_nav_item.html" with url="suivi_secteurs" icon="pie_chart" label="Secteurs & Recouvrement" actifs="suivi_secteurs" %}
 {% if peut_voir_budget %}
+{% include "recettes/_nav_item.html" with url="suivi_secteurs" icon="pie_chart" label="Secteurs & Recouvrement" actifs="suivi_secteurs" %}
 {% include "recettes/_nav_item.html" with url="liste_objectifs" icon="query_stats" label="Budgets & Écarts" actifs="liste_objectifs ajouter_objectif" %}
 {% include "recettes/_nav_item.html" with url="comparaison" icon="compare_arrows" label="Exercices comparatifs" actifs="comparaison" %}
 {% endif %}

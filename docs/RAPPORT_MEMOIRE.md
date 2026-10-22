@@ -69,7 +69,7 @@ Cette méthode simple reste sensible aux ruptures de tendance, aux données manq
 
 La saisie valide les montants, vérifie le format des pièces et refuse une date d'imputation future. Les écarts budgétaires sont calculés sur les mois clos pour le déclenchement des alertes. Les rappels de saisie vérifient les catégories actives par secteur et appliquent le jour global configuré ainsi que le délai de versement du secteur. Les notifications sont idempotentes ; un e-mail échoué reste reprenable sans générer de doublon.
 
-Les rapports peuvent être conservés sous forme de fichiers médias. Si un fichier référencé n'existe plus, l'application renvoie une réponse 404 journalisée. En production Render, les médias sont dirigés vers un disque persistant ; les secrets SMTP et le compte administrateur sont configurés dans l'environnement, pas dans le dépôt.
+Les rapports peuvent être conservés sous forme de fichiers médias. Si un fichier référencé n'existe plus, l'application renvoie une réponse 404 journalisée. En production, les médias doivent être stockés sur un support persistant et les secrets SMTP configurés dans l'environnement, pas dans le dépôt.
 
 Les textes juridiques non vérifiés ont été retirés de l'interface. Les règles applicables, délégations et paramètres comptables doivent être validés par les personnes compétentes de la collectivité.
 
@@ -91,7 +91,7 @@ Les données générées par `generer_donnees_fictives` servent aux démonstrati
 
 ## 8. Déploiement et limites
 
-Le Blueprint Render configure une base PostgreSQL, des variables SMTP, un superutilisateur initial et un traitement Cron. Le service web utilise le disque persistant configuré pour les médias. Ce disque exige un plan payant et n'est pas partagé avec le Cron ; la tâche périodique ne manipule donc que la base et les e-mails.
+Le déploiement de l'application nécessite une base de données adaptée, un stockage persistant pour les médias, les variables SMTP et un ordonnanceur pour les tâches périodiques. Ces ressources et leurs secrets doivent être configurés selon les services de l'hébergeur choisi.
 
 Les limites actuelles incluent l'ajustement linéaire, la dépendance à l'exhaustivité des données et l'absence d'une validation empirique sur les données réelles de la collectivité. Les règles de versement et habilitations doivent être paramétrées et vérifiées par un responsable.
 

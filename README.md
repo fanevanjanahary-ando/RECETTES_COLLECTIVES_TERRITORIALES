@@ -27,16 +27,14 @@ python manage.py runserver
 ## Comptes de démonstration
 Les comptes de démonstration sont chargés uniquement par la commande de données fictives. Leur mot de passe est `demo1234` et leurs adresses sont `admin.demo@collectivite.example`, `responsable.demo@collectivite.example`, `elu.demo@collectivite.example` et `agent.demo@collectivite.example`.
 
-Sur une base locale vide, créez l'administrateur avec `python manage.py createsuperuser` ou `python manage.py creer_admin` en définissant `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_EMAIL` et `DJANGO_SUPERUSER_PASSWORD`. Ne réutilisez pas les identifiants de démonstration en production.
+Sur une base vide, créez l'administrateur avec `python manage.py createsuperuser`. Ne réutilisez pas les identifiants de démonstration en production.
 
 ## Tâches périodiques
 `lancer.sh` démarre `boucle_taches` (notifications et historisation des prévisions, toutes les heures). Manuellement : `python manage.py envoyer_notifications`, `python manage.py actualiser_previsions`.
 
-## Déploiement Render
+## Déploiement
 
-Le Blueprint utilise PostgreSQL, un disque persistant pour les médias et une tâche Cron quotidienne. Les disques persistants nécessitent un plan Render payant et ne sont pas accessibles depuis Cron ; le service web conserve les téléversements sous `/var/data/media`, tandis que Cron traite la base de données et les e-mails uniquement.
-
-À la création du Blueprint, renseignez les secrets `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_EMAIL`, `DJANGO_SUPERUSER_PASSWORD`, ainsi que les paramètres SMTP du groupe `collectivite-mail`. Ces valeurs ne doivent pas être inscrites dans le dépôt. `creer_admin` est exécutée au démarrage du service et synchronise le rôle applicatif du superutilisateur existant.
+Pour un déploiement sur un hébergeur, configurez la base de données, le stockage persistant des médias, les paramètres SMTP et les tâches périodiques selon les services proposés par la plateforme. Créez le compte administrateur avec `python manage.py createsuperuser`. Les secrets doivent être définis dans l'environnement d'exécution et ne jamais être inscrits dans le dépôt.
 
 ## Tests
 `python manage.py test recettes`

@@ -2,9 +2,9 @@
 
 ## Architecture et exécution
 
-Application Django monolithique : `collectivite` porte la configuration et les routes, `recettes` contient les règles métier, les vues HTML, l'API JSON, les rapports et les commandes. SQLite sert au développement local ; Render utilise PostgreSQL via `DATABASE_URL`.
+Application Django monolithique : `collectivite` porte la configuration et les routes, `recettes` contient les règles métier, les vues HTML, l'API JSON, les rapports et les commandes. SQLite sert au développement local ; PostgreSQL peut être configuré en production via `DATABASE_URL`.
 
-Les ressources front sont construites localement avec `npm run assets`. WhiteNoise sert les fichiers statiques en production. Les pièces justificatives et rapports utilisent le stockage Django sous `MEDIA_ROOT` ; sur Render, ce chemin doit pointer vers un disque persistant.
+Les ressources front sont construites localement avec `npm run assets`. WhiteNoise sert les fichiers statiques en production. Les pièces justificatives et rapports utilisent le stockage Django sous `MEDIA_ROOT` ; en production, ce chemin doit pointer vers un stockage persistant adapté à l'hébergeur.
 
 ## Modules métier
 
@@ -36,11 +36,9 @@ Les alertes d'écart excluent le mois courant. Le rappel de saisie compare les r
 
 La commande planifiée `python manage.py boucle_taches --une-fois` exécute les alertes, les rappels, les reprises d'e-mails d'anomalies et l'historisation des prévisions. `python manage.py envoyer_notifications` permet de déclencher les notifications manuellement.
 
-## Fichiers et déploiement Render
+## Fichiers et déploiement
 
-Le système de fichiers Render est éphémère par défaut. Le Blueprint configure un disque persistant sous `/var/data` pour le service web et `DJANGO_MEDIA_ROOT=/var/data/media`. Render exige un plan payant pour ce disque ; un service Cron ne peut pas accéder au disque. La tâche planifiée ne manipule que la base de données et les e-mails.
-
-Les identifiants SMTP et ceux du superutilisateur initial sont des variables secrètes saisies dans Render, jamais versionnées. Le démarrage appelle `creer_admin`, qui crée le superutilisateur sur une base vide et synchronise le rôle applicatif d'un superutilisateur déjà présent. Un identifiant déjà utilisé par un compte non-superutilisateur bloque le démarrage avec une erreur explicite.
+Le stockage sous `MEDIA_ROOT` doit être persistant lorsque l'application est déployée sur un système de fichiers éphémère. Configurez la base de données, les paramètres SMTP, les variables secrètes et l'ordonnanceur de tâches selon les services de l'hébergeur. Créez le superutilisateur avec `python manage.py createsuperuser` ; ses identifiants ne doivent pas être versionnés.
 
 ## Vérifications
 

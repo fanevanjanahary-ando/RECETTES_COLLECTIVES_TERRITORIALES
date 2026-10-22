@@ -192,11 +192,11 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant Cron as Tâche planifiée
+    participant Ordonnanceur as Tâche planifiée
     participant N as notifications.py
     participant DB as Base de données
     participant SMTP as Serveur de courrier
-    Cron->>N: boucle_taches --une-fois
+    Ordonnanceur->>N: boucle_taches --une-fois
     N->>DB: Calcule les écarts sur les mois clos
     N->>DB: Vérifie les catégories manquantes et échéances par secteur
     N->>DB: Crée ou retrouve les notifications idempotentes
@@ -204,7 +204,7 @@ sequenceDiagram
     alt Échec SMTP
         SMTP-->>N: Erreur journalisée
         N->>DB: Laisse envoyee_par_email à faux
-        Cron->>N: Nouvelle tentative au passage suivant
+        Ordonnanceur->>N: Nouvelle tentative au passage suivant
     else Envoi confirmé
         SMTP-->>N: Succès
         N->>DB: Marque le courriel comme envoyé

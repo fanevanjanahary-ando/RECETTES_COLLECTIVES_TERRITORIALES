@@ -1088,23 +1088,6 @@ class CorrectionsAuditRegressions(BaseDonnees):
     def test_commande_notifications_accepte_la_reprise_des_anomalies(self):
         call_command("envoyer_notifications", type="anomalies", verbosity=0)
 
-    def test_commande_creer_admin_cree_et_synchronise_le_role(self):
-        with patch.dict(
-            "os.environ",
-            {
-                "DJANGO_SUPERUSER_USERNAME": "admin-render-test",
-                "DJANGO_SUPERUSER_EMAIL": "admin-render@example.test",
-                "DJANGO_SUPERUSER_PASSWORD": "MotDePasse!2026",
-            },
-        ):
-            call_command("creer_admin", verbosity=0)
-            call_command("creer_admin", verbosity=0)
-
-        utilisateur = User.objects.get(username="admin-render-test")
-        self.assertTrue(utilisateur.is_superuser)
-        self.assertTrue(utilisateur.is_staff)
-        self.assertEqual(utilisateur.profil.role, Profil.Role.ADMIN)
-
     @patch("recettes.management.commands.boucle_taches.historiser_previsions", return_value=1)
     @patch("recettes.management.commands.boucle_taches.notifier_anomalies_en_attente", return_value=2)
     @patch("recettes.management.commands.boucle_taches.notifier_echeances_recouvrement", return_value=3)

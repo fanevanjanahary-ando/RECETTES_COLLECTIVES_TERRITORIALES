@@ -166,6 +166,17 @@ class Point2_SuiviParSecteur(BaseDonnees):
         self.assertEqual(parts["Secteur Nord"], 75.0)
         self.assertEqual(parts["Secteur Sud"], 25.0)
 
+    def test_barres_de_repartition_utilisent_un_pourcentage_css_valide(self):
+        Recette.objects.create(categorie=self.taxes, secteur=self.nord, mois=date(2026, 1, 1), montant=Decimal("3000"))
+        Recette.objects.create(categorie=self.taxes, secteur=self.sud, mois=date(2026, 1, 1), montant=Decimal("1000"))
+        self.client.force_login(self.responsable)
+
+        reponse = self.client.get(reverse("suivi_secteurs"))
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, 'style="width: 75.0%"')
+        self.assertContains(reponse, 'style="width: 25.0%"')
+
     def test_anomalie_rattachee_a_un_secteur(self):
         anomalie = Anomalie.objects.create(
             categorie=self.taxes, secteur=self.nord, mois=date(2026, 1, 1),

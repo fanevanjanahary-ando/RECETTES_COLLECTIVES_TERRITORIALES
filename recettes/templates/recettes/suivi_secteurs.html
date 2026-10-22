@@ -1,4 +1,4 @@
-{% extends "recettes/base.html" %}{% load formats static %}
+{% extends "recettes/base.html" %}{% load formats static l10n %}
 {% block title %}Secteurs & Recouvrement{% endblock %}
 {% block tw_css %}<link href="{% static 'recettes/vendor/tailwind-base.css' %}?v=20261022-4" rel="stylesheet">{% endblock %}
 {% block body_class %}bg-[#f9f9fb] font-inter text-[#191c1e]{% endblock %}
@@ -48,9 +48,9 @@
 <div class="w-full bg-white p-4 rounded-xl border border-[#eaedf1] shadow-2xs flex flex-col gap-2.5">
 <div class="flex justify-between items-center text-xs text-[#64748b]">
 <span class="">Répartition globale des {{ suivi.total|ariary }} encaissés :</span>
-<div class="flex items-center gap-4 text-[11px]">{% for l in lignes %}<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm {% if forloop.counter0 == 0 %}bg-[#25272c]{% elif forloop.counter0 == 1 %}bg-slate-500{% elif forloop.counter0 == 2 %}bg-[#b8f7e4] border border-slate-300{% else %}bg-slate-200{% endif %}"></span> {{ l.secteur.nom }} ({{ l.part_pct|floatformat:0 }}%)</span>{% endfor %}</div>
+<div class="flex items-center gap-4 text-[11px]">{% for l in lignes %}<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm {% if forloop.counter0 == 0 %}bg-[#25272c]{% elif forloop.counter0 == 1 %}bg-slate-500{% elif forloop.counter0 == 2 %}bg-slate-300{% else %}bg-slate-200{% endif %}"></span> {{ l.secteur.nom }} ({{ l.part_pct|floatformat:0 }}%)</span>{% endfor %}</div>
 </div>
-<div class="w-full h-3 rounded-full bg-[#f9f9fb] flex overflow-hidden border border-[#eaedf1]">{% for l in lignes %}<div class="{% if forloop.counter0 == 0 %}bg-[#25272c]{% elif forloop.counter0 == 1 %}bg-slate-500{% elif forloop.counter0 == 2 %}bg-[#b8f7e4]{% else %}bg-slate-300{% endif %} h-full" style="width: {{ l.part_pct }}%"></div>{% endfor %}</div>
+<div class="w-full h-3 rounded-full bg-[#f9f9fb] flex overflow-hidden border border-[#eaedf1]">{% for l in lignes %}<div class="{% if forloop.counter0 == 0 %}bg-[#25272c]{% elif forloop.counter0 == 1 %}bg-slate-500{% elif forloop.counter0 == 2 %}bg-slate-300{% else %}bg-slate-200{% endif %} h-full" style="width: {{ l.part_pct|unlocalize }}%"></div>{% endfor %}</div>
 </div>
 
 <div class="bg-[#ffffff] rounded-xl border border-[#eaedf1] shadow-2xs overflow-hidden">
@@ -76,7 +76,7 @@
 {% for l in lignes %}<tr class="hover:bg-[#f9f9fb]/50 transition-colors">
 <td class="py-3.5 px-5 font-semibold text-[#191c1e]">
 <div class="flex items-center gap-2.5">
-<span class="w-2.5 h-2.5 rounded-sm {% if forloop.counter0 == 0 %}bg-[#25272c]{% elif forloop.counter0 == 1 %}bg-slate-500{% elif forloop.counter0 == 2 %}bg-[#b8f7e4] border border-slate-300{% else %}bg-slate-200{% endif %}"></span>
+<span class="w-2.5 h-2.5 rounded-sm {% if forloop.counter0 == 0 %}bg-[#25272c]{% elif forloop.counter0 == 1 %}bg-slate-500{% elif forloop.counter0 == 2 %}bg-slate-300{% else %}bg-slate-200{% endif %}"></span>
 <div>
 <span class="block">{{ l.secteur.nom }}</span>
 <span class="text-[10px] text-[#64748b] font-normal">{{ l.secteur.description }}</span>
@@ -88,7 +88,7 @@
 <td class="py-3.5 px-4 text-center font-semibold text-[#191c1e]">{{ l.part_pct|floatformat:1 }} %</td>
 <td class="py-3.5 px-4">
 <div class="w-28 bg-[#f9f9fb] rounded-full h-1.5 overflow-hidden border border-[#eaedf1]">
-<div class="{% if forloop.counter0 == 0 %}bg-[#25272c]{% elif forloop.counter0 == 1 %}bg-slate-500{% elif forloop.counter0 == 2 %}bg-[#b8f7e4]{% else %}bg-slate-200{% endif %} h-full rounded-full" style="width: {{ l.barre }}%"></div>
+<div class="{% if forloop.counter0 == 0 %}bg-[#25272c]{% elif forloop.counter0 == 1 %}bg-slate-500{% elif forloop.counter0 == 2 %}bg-slate-300{% else %}bg-slate-200{% endif %} h-full rounded-full" style="width: {{ l.barre|unlocalize }}%"></div>
 </div>
 </td>
 <td class="py-3.5 px-4 text-center">

@@ -80,7 +80,7 @@
 <td class="py-3.5 px-4 text-[#64748b]">{{ r.get_mode_reglement_display }}</td>
 <td class="py-3.5 px-4 text-center">
 <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Enregistré </span>
+Enregistré </span>
 </td>
 <td class="py-3.5 px-5 text-right">
 <a class="text-[#64748b] hover:text-[#191c1e] text-xs font-medium" href='{% url "detail_recette" r.pk %}'>Détail</a>{% if peut_gerer %}<a href="{% url 'modifier_recette' r.pk %}" class="text-[#64748b] hover:text-[#191c1e] text-xs font-medium ml-3">Modifier</a>{% endif %}

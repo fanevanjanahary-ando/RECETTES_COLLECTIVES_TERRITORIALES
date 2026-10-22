@@ -96,7 +96,6 @@
 </div>
 <div class="my-3">
 <div class="text-base font-bold text-slate-900 flex items-center gap-2">
-<span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
 <span class="">{{ nb_actifs }}/{{ nb_comptes }} comptes actifs</span>
 </div>
 <div class="text-xs text-slate-500 mt-1">Nomenclature des recettes · exercice {{ annee }}</div>
@@ -164,11 +163,11 @@
 </div>{% endif %}
 <span class="font-mono text-xs font-semibold text-slate-900 w-24 text-right">{{ c.total|ariary }}</span>
 {% if not c.categorie.actif %}<span class="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 bg-slate-100/60 px-2 py-0.5 rounded-full">
-<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span> Désactivé
+ Désactivé
  </span>{% elif c.categorie.en_revision %}<span class="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 bg-amber-100/60 px-2 py-0.5 rounded-full">
-<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> En révision
+ En révision
  </span>{% else %}<span class="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-100/60 px-2 py-0.5 rounded-full">
-<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Actif
+ Actif
  </span>{% endif %}
 <div class="flex items-center gap-1 text-slate-400">
 <button class="p-1 hover:text-emerald-700 rounded" type="button"><span class="material-symbols-outlined text-[16px]">edit</span></button>

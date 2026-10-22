@@ -48,7 +48,7 @@
 <div class="w-full bg-white p-4 rounded-xl border border-[#eaedf1] shadow-2xs flex flex-col gap-2.5">
 <div class="flex justify-between items-center text-xs text-[#64748b]">
 <span class="">Répartition globale des {{ suivi.total|ariary }} encaissés :</span>
-<div class="flex items-center gap-4 text-[11px]">{% for l in lignes %}<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full {% if forloop.counter0 == 0 %}bg-[#25272c]{% elif forloop.counter0 == 1 %}bg-slate-500{% elif forloop.counter0 == 2 %}bg-[#b8f7e4] border border-slate-300{% else %}bg-slate-200{% endif %}"></span> {{ l.secteur.nom }} ({{ l.part_pct|floatformat:0 }}%)</span>{% endfor %}</div>
+<div class="flex items-center gap-4 text-[11px]">{% for l in lignes %}<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm {% if forloop.counter0 == 0 %}bg-[#25272c]{% elif forloop.counter0 == 1 %}bg-slate-500{% elif forloop.counter0 == 2 %}bg-[#b8f7e4] border border-slate-300{% else %}bg-slate-200{% endif %}"></span> {{ l.secteur.nom }} ({{ l.part_pct|floatformat:0 }}%)</span>{% endfor %}</div>
 </div>
 <div class="w-full h-3 rounded-full bg-[#f9f9fb] flex overflow-hidden border border-[#eaedf1]">{% for l in lignes %}<div class="{% if forloop.counter0 == 0 %}bg-[#25272c]{% elif forloop.counter0 == 1 %}bg-slate-500{% elif forloop.counter0 == 2 %}bg-[#b8f7e4]{% else %}bg-slate-300{% endif %} h-full" style="width: {{ l.part_pct }}%"></div>{% endfor %}</div>
 </div>
@@ -76,7 +76,7 @@
 {% for l in lignes %}<tr class="hover:bg-[#f9f9fb]/50 transition-colors">
 <td class="py-3.5 px-5 font-semibold text-[#191c1e]">
 <div class="flex items-center gap-2.5">
-<span class="w-2.5 h-2.5 rounded-full {% if forloop.counter0 == 0 %}bg-[#25272c]{% elif forloop.counter0 == 1 %}bg-slate-500{% elif forloop.counter0 == 2 %}bg-[#b8f7e4] border border-slate-300{% else %}bg-slate-200{% endif %}"></span>
+<span class="w-2.5 h-2.5 rounded-sm {% if forloop.counter0 == 0 %}bg-[#25272c]{% elif forloop.counter0 == 1 %}bg-slate-500{% elif forloop.counter0 == 2 %}bg-[#b8f7e4] border border-slate-300{% else %}bg-slate-200{% endif %}"></span>
 <div>
 <span class="block">{{ l.secteur.nom }}</span>
 <span class="text-[10px] text-[#64748b] font-normal">{{ l.secteur.description }}</span>
@@ -93,9 +93,9 @@
 </td>
 <td class="py-3.5 px-4 text-center">
 {% if l.alerte %}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
-<span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> {{ l.statut }}
+{{ l.statut }}
  </span>{% else %}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Conforme
+Conforme
  </span>{% endif %}
 </td>
 <td class="py-3.5 px-5 text-right">
@@ -152,21 +152,6 @@
 </div>
 </div>{% endif %}
 
-<div class="bg-[#25272c] text-white p-5 rounded-xl shadow-sm flex flex-col justify-between">
-<div>
-<div class="flex items-center gap-2 mb-2">
-<div class="w-6 h-6 rounded bg-[#b8f7e4] text-[#25272c] flex items-center justify-center font-bold text-xs">Recettes</div>
-<span class="text-xs font-semibold text-white tracking-tight">Règle de sectorisation</span>
-</div>
-<p class="text-xs text-white/70 leading-relaxed mt-2">
- Les encaissements régisseurs sont imputés au compte 70323 et consolidés chaque quinzaine au Grand Livre. La réglementation en vigueur impose la transmission des arrêtés de caisse signés électroniquement par le régisseur titulaire.
- </p>
-</div>
-<div class="pt-4 border-t border-white/10 flex items-center justify-between text-[11px] text-white/60">
-<span class="">Arrêté mensuel N°{{ suivi.mois_fin|date:"m-Y" }}</span>
-<span class="text-[#b8f7e4] font-medium">Consolidé</span>
-</div>
-</div>
 </div>
 
 {% endblock %}

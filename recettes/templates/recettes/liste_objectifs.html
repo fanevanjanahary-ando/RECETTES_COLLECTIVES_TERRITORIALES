@@ -110,7 +110,7 @@
 </thead>
 <tbody class="divide-y divide-slate-100" id="objectivesTableBody">
 
-{% for e in ecarts %}<tr class="hover:bg-slate-50/70 transition-colors" data-status="{% if e.significatif %}ALERT{% else %}OK{% endif %}"><td class="py-3.5 px-4"><div class="flex flex-col"><span class="font-semibold text-slate-900">{{ e.categorie }}</span><span class="text-[11px] text-slate-400 font-mono">Compte {{ e.code|default:"—" }}{% if e.secteur %} · {{ e.secteur }}{% endif %}{% if choix_mois == "tous" %} · {{ e.mois|mois_fr }}{% endif %}</span></div></td><td class="py-3.5 px-4 text-right font-mono text-slate-700">{{ e.cible|ariary }}</td><td class="py-3.5 px-4 text-right font-mono font-semibold text-slate-900">{{ e.realise|ariary }}</td><td class="py-3.5 px-4 text-right">{% if e.significatif %}<div class="flex flex-col items-end"><span class="font-bold font-mono text-rose-600">{{ e.ecart_pct|pourcent_signe }}</span><span class="text-[10px] font-mono text-slate-400">{{ e.ecart_net|ariary }}</span></div>{% else %}<div class="flex flex-col items-end"><span class="font-semibold font-mono text-slate-700">{{ e.ecart_pct|pourcent_signe }}</span><span class="text-[10px] font-mono text-slate-400">{{ e.ecart_net|ariary }}</span></div>{% endif %}</td><td class="py-3.5 px-4 text-center">{% if e.significatif %}<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium text-rose-700 bg-rose-50 border border-rose-200"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Écart : {{ e.sens }}</span>{% else %}<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200/60"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Conforme</span>{% endif %}</td><td class="py-3.5 px-4 text-right"><a class="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors" href='{% url "liste_recettes" %}?categorie={{ e.categorie_id }}&amp;periode={{ e.mois|date:"Y-m" }}' title="Examiner"><span class="material-symbols-outlined text-base">chevron_right</span></a></td></tr>{% empty %}<tr><td class="py-8 text-center text-slate-400 text-sm" colspan="6">Aucun objectif budgétaire pour ces critères.</td></tr>{% endfor %}
+{% for e in ecarts %}<tr class="hover:bg-slate-50/70 transition-colors" data-status="{% if e.significatif %}ALERT{% else %}OK{% endif %}"><td class="py-3.5 px-4"><div class="flex flex-col"><span class="font-semibold text-slate-900">{{ e.categorie }}</span><span class="text-[11px] text-slate-400 font-mono">Compte {{ e.code|default:"—" }}{% if e.secteur %} · {{ e.secteur }}{% endif %}{% if choix_mois == "tous" %} · {{ e.mois|mois_fr }}{% endif %}</span></div></td><td class="py-3.5 px-4 text-right font-mono text-slate-700">{{ e.cible|ariary }}</td><td class="py-3.5 px-4 text-right font-mono font-semibold text-slate-900">{{ e.realise|ariary }}</td><td class="py-3.5 px-4 text-right">{% if e.significatif %}<div class="flex flex-col items-end"><span class="font-bold font-mono text-rose-600">{{ e.ecart_pct|pourcent_signe }}</span><span class="text-[10px] font-mono text-slate-400">{{ e.ecart_net|ariary }}</span></div>{% else %}<div class="flex flex-col items-end"><span class="font-semibold font-mono text-slate-700">{{ e.ecart_pct|pourcent_signe }}</span><span class="text-[10px] font-mono text-slate-400">{{ e.ecart_net|ariary }}</span></div>{% endif %}</td><td class="py-3.5 px-4 text-center">{% if e.significatif %}<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium text-rose-700 bg-rose-50 border border-rose-200">Écart : {{ e.sens }}</span>{% else %}<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium text-emerald-700 bg-emerald-50 text-emerald-800 border border-emerald-200/60">Conforme</span>{% endif %}</td><td class="py-3.5 px-4 text-right"><a class="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors" href='{% url "liste_recettes" %}?categorie={{ e.categorie_id }}&amp;periode={{ e.mois|date:"Y-m" }}' title="Examiner"><span class="material-symbols-outlined text-base">chevron_right</span></a></td></tr>{% empty %}<tr><td class="py-8 text-center text-slate-400 text-sm" colspan="6">Aucun objectif budgétaire pour ces critères.</td></tr>{% endfor %}
 
 
 
@@ -158,20 +158,12 @@
 </div>
 </div>
 
-<div class="bg-[#25272C] text-white rounded-xl p-5 border border-[#343840] shadow-sm flex flex-col gap-3.5">
-<div class="flex items-center gap-2 text-[#B8F7E4]">
-<span class="material-symbols-outlined text-lg">flag</span>
-<span class="text-xs font-bold uppercase tracking-wider font-mono">Arbitrage suggéré</span>
-</div>
-<p class="text-xs text-slate-300 leading-relaxed">{% if pire %}Le décalage sur <strong>{{ pire.categorie }} ({{ pire.ecart_net|ariary }})</strong> peut être notifié aux responsables pour suivi de trésorerie sans requérir de délibération modificative immédiate.{% else %}Aucun écart significatif à arbitrer pour cette sélection.{% endif %}</p>
-<div class="flex items-center gap-2 pt-1">
-<form action="{% url 'declencher_notifications' %}" class="inline" method="post">{% csrf_token %}<input type="hidden" name="next" value="{% url 'liste_objectifs' %}"><button class="flex-1 py-2 px-3 rounded-lg bg-[#B8F7E4] text-[#15171A] text-xs font-bold hover:bg-[#A3F2DB] transition-colors flex items-center justify-center gap-1.5" type="submit">
-<span class="material-symbols-outlined text-sm">send</span>
-<span class="">Aviser l'ordonnateur</span>
-</button></form>
-<a class="py-2 px-3 rounded-lg bg-[#343840] hover:bg-[#4B515D] text-slate-200 text-xs font-medium transition-colors" href='{% url "rapports" %}'>
- Rapport
- </a>
+<div class="flex flex-col gap-3">
+<h3 class="text-sm font-semibold text-slate-900">Suivi des écarts</h3>
+<p class="text-xs text-slate-600 leading-relaxed">{% if pire %}Écart relevé sur <strong>{{ pire.categorie }} ({{ pire.ecart_net|ariary }})</strong>.{% else %}Aucun écart significatif pour cette sélection.{% endif %}</p>
+<div class="flex items-center gap-4">
+<form action="{% url 'declencher_notifications' %}" class="inline" method="post">{% csrf_token %}<input type="hidden" name="next" value="{% url 'liste_objectifs' %}"><button class="text-xs font-semibold text-slate-900 hover:underline" type="submit">Aviser l'ordonnateur</button></form>
+<a class="text-xs font-medium text-slate-600 hover:text-slate-900 hover:underline" href='{% url "rapports" %}'>Rapport</a>
 </div>
 </div>
 </div>

@@ -44,7 +44,6 @@
 <div>
 <div class="text-2xl font-bold text-slate-900">{{ nb_lignes }}<span class="text-sm font-semibold text-slate-500">secteurs</span></div>
 <div class="flex items-center gap-1.5 mt-2 text-xs text-slate-500 font-medium">
-<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
 <span class="">{% for l in lignes %}{{ l.secteur.nom|cut:"Secteur " }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
 </div>
 </div>
@@ -76,7 +75,6 @@
 <div>
 <div class="text-2xl font-bold text-amber-900">{{ souffrance|ariary }}</div>
 <div class="flex items-center gap-1.5 mt-2 text-xs text-amber-800 font-medium">
-<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
 <span class="">{% if pire %}{{ pire.secteur.nom }} : {{ pire.anomalies_ouvertes }} dossier{{ pire.anomalies_ouvertes|pluralize }}{% if pire.retard_jours %} (+{{ pire.retard_jours }}j){% endif %}{% else %}Aucun dépassement{% endif %}</span>
 </div>
 </div>
@@ -113,7 +111,7 @@
 
 <div class="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex gap-0.5 p-0.5">{% for l in lignes %}<div class="{% if forloop.counter0 == 0 %}bg-emerald-500{% elif forloop.counter0 == 1 %}bg-teal-500{% elif forloop.counter0 == 2 %}bg-sky-500{% else %}bg-indigo-500{% endif %} h-full{% if forloop.first %} rounded-l-full{% endif %}{% if forloop.last %} rounded-r-full{% endif %} transition-all duration-300" style="width: {{ l.part_pct }}%" title="{{ l.secteur.nom }}: {{ l.part_pct }}%"></div>{% endfor %}</div>
 
-<div class="flex flex-wrap items-center gap-x-6 gap-y-2 pt-1 text-xs">{% for l in lignes %}<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full {% if forloop.counter0 == 0 %}bg-emerald-500{% elif forloop.counter0 == 1 %}bg-teal-500{% elif forloop.counter0 == 2 %}bg-sky-500{% else %}bg-indigo-500{% endif %}"></span><span class="text-slate-600 font-medium">{{ l.secteur.nom|cut:"Secteur " }} : <strong class="text-slate-900">{{ l.total|ariary }}</strong> ({{ l.part_pct|floatformat:0 }}%)</span></div>{% endfor %}</div>
+<div class="flex flex-wrap items-center gap-x-6 gap-y-2 pt-1 text-xs">{% for l in lignes %}<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-sm {% if forloop.counter0 == 0 %}bg-emerald-500{% elif forloop.counter0 == 1 %}bg-teal-500{% elif forloop.counter0 == 2 %}bg-sky-500{% else %}bg-indigo-500{% endif %}"></span><span class="text-slate-600 font-medium">{{ l.secteur.nom|cut:"Secteur " }} : <strong class="text-slate-900">{{ l.total|ariary }}</strong> ({{ l.part_pct|floatformat:0 }}%)</span></div>{% endfor %}</div>
 </div>
 
 <div class="space-y-3">
@@ -136,13 +134,10 @@
 </div>
 
 {% if not l.secteur.actif %}<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-50 text-slate-800 border border-slate-200">
-<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
 <span class="">Régie suspendue</span>
 </div>{% elif l.anomalies_ouvertes %}<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
 <span class="">{% if l.retard_jours %}Retard versement (+{{ l.retard_jours }}j){% else %}{{ l.anomalies_ouvertes }} dossier{{ l.anomalies_ouvertes|pluralize }} ouvert{{ l.anomalies_ouvertes|pluralize }}{% endif %}</span>
 </div>{% else %}<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
-<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
 <span class="">Conforme</span>
 </div>{% endif %}
 </div>
